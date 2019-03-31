@@ -32,13 +32,15 @@ def grep_tomcat_access_log(tomcat_access_path, log_pattern):
 
     log_pattern = log_pattern.replace('&quot;', '"').split(' ')
     logs = []
+    num_of_line = 0
     with open(tomcat_access_path) as logfile:
         line = logfile.readline()
+        num_of_line += 1
         while line:
             log_entry = parser_tomcat_log_line(line, log_pattern)
             logs.append(log_entry)
             line = logfile.readline()
-
+    logging.debug("parsed %d lines", num_of_line)
     return logs
 
 
@@ -303,7 +305,7 @@ class TimeBasedIpBlocker(AbstractIpBlocker):
         conn.close()
 
         if row is None:
-            # no row with given IP found
+            logging.debug("IP %s not found in database", log_entry.ip_str)
             self.add_log_entry(log_entry)
             return False
         else:
@@ -363,7 +365,7 @@ class TimeBasedIpBlocker(AbstractIpBlocker):
         except Exception as ex:
             print("Cannot update block_network")
         # finish
-        logging.info("added %s to blocked network", ip_network)
+        logging.info("(%s) add %s to blocked network", log_entry.ip_str, ip_network)
         pass
 
     def update_access(self, log_entry: LogEntry, access_count: int):
