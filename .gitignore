@@ -1,3 +1,4 @@
 .pytest_cache/
+test-data/apache2/
 __pycache__/
 .idea/

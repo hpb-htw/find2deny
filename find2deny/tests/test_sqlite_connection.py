@@ -4,7 +4,9 @@
 from datetime import datetime
 import pytest
 import logging
-from .context import ip_grep
+
+from .. import log_parser
+from .. import firewall_judgment
 import sqlite3
 
 test_db_path = './test-data/ipdb.sqlite'
@@ -21,9 +23,9 @@ def prepare_test_data(caplog):
         conn.executescript(sql_code)
 
     ip_data = [
-        (ip_grep.LogEntry.ip_to_int('1.2.3.4'),    '2019-03-28 11:12:13.000+0100', '2019-03-28 11:12:15.000+0100', 2),
-        (ip_grep.LogEntry.ip_to_int('5.6.7.8'),    '2019-03-28 11:12:13.000+0100', '2019-03-28 11:12:23.000+0100', 30),
-        (ip_grep.LogEntry.ip_to_int('9.10.11.12'), '2019-03-28 11:12:13.000+0100', '2019-03-28 11:12:13.000+0100', 4),
+        (log_parser.LogEntry.ip_to_int('1.2.3.4'), '2019-03-28 11:12:13.000+0100', '2019-03-28 11:12:15.000+0100', 2),
+        (log_parser.LogEntry.ip_to_int('5.6.7.8'), '2019-03-28 11:12:13.000+0100', '2019-03-28 11:12:23.000+0100', 30),
+        (log_parser.LogEntry.ip_to_int('9.10.11.12'), '2019-03-28 11:12:13.000+0100', '2019-03-28 11:12:13.000+0100', 4),
     ]
     conn.executemany("INSERT INTO log_ip (ip, first_access, last_access, access_count) VALUES (?, ? , ?, ?)", ip_data)
     conn.commit()
@@ -34,12 +36,12 @@ def prepare_test_data(caplog):
 def test_should_deny__add_new_entry_to_log(prepare_test_data, caplog):
     global test_db_path
 
-    blocker = ip_grep.TimeBasedIpBlocker(test_db_path)
-    ip = ip_grep.LogEntry.ip_to_int('8.7.6.5')
-    log_entry = ip_grep.LogEntry(
+    blocker = firewall_judgment.TimeBasedIpJudgment(test_db_path)
+    ip = log_parser.LogEntry.ip_to_int('8.7.6.5')
+    log_entry = log_parser.LogEntry(
         ip=ip,
         time=datetime.strptime("2019-03-28 11:12:30.000+0100",
-                               ip_grep.SQL_LITE_DATETIME_PATTERN),
+                               firewall_judgment.DATETIME_FORMAT_PATTERN),
         status=401,
         byte=4286
     )
@@ -55,12 +57,12 @@ def test_should_deny__add_new_entry_to_log(prepare_test_data, caplog):
 
 def test_block_ip_network(prepare_test_data):
     global test_db_path
-    blocker = ip_grep.TimeBasedIpBlocker(test_db_path)
-    ip = ip_grep.LogEntry.ip_to_int('5.6.7.8')
-    log_entry = ip_grep.LogEntry(
+    blocker = firewall_judgment.TimeBasedIpJudgment(test_db_path)
+    ip = log_parser.LogEntry.ip_to_int('5.6.7.8')
+    log_entry = log_parser.LogEntry(
         ip=ip,
         time=datetime.strptime("2019-03-28 11:12:33.000+0100",
-                               ip_grep.SQL_LITE_DATETIME_PATTERN),
+                               firewall_judgment.DATETIME_FORMAT_PATTERN),
         status=401,
         byte=4286
     )
@@ -76,12 +78,12 @@ def test_block_ip_network(prepare_test_data):
 
 def test_update_access_time():
     global test_db_path
-    blocker = ip_grep.TimeBasedIpBlocker(test_db_path)
-    ip = ip_grep.LogEntry.ip_to_int('9.10.11.12')
-    log_entry = ip_grep.LogEntry(
+    blocker = firewall_judgment.TimeBasedIpJudgment(test_db_path)
+    ip = log_parser.LogEntry.ip_to_int('9.10.11.12')
+    log_entry = log_parser.LogEntry(
         ip=ip,
         time=datetime.strptime("2019-03-28 11:15:33.000+0100",
-                               ip_grep.SQL_LITE_DATETIME_PATTERN),
+                               firewall_judgment.DATETIME_FORMAT_PATTERN),
         status=401,
         byte=4286
     )

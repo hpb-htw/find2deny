@@ -2,17 +2,26 @@
 
 
 from datetime import datetime
+import pytest
+import logging
 import pprint
-from .context import ip_grep
+
+from .. import log_parser
+
+
+@pytest.fixture
+def prepare_test_data(caplog):
+    caplog.set_level(logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG)
+    logging.debug("prepare_test done")
 
 
 def test_parse_tomcat_log_line():
-    print("start test")
     line = '127.0.0.1 134.96.214.161 - someone [27/Mar/2019:13:11:45 +0100] "GET /mathcoach/gfx/muetze.ico HTTP/1.1" 200 4286'
     pattern = '%h %{X-Forwarded-For}i %l %u %t &quot;%r&quot; %s %b'.replace('&quot;', '"').split(' ')
-    entry = ip_grep.parser_tomcat_log_line(line, pattern)
-    pprint.pprint(entry)
-    assert entry['ip'] == ip_grep.LogEntry.ip_to_int('134.96.214.161')
+    entry = log_parser.parser_tomcat_log_line(line, pattern)
+    logging.debug("%s", entry)
+    assert entry['ip'] == log_parser.LogEntry.ip_to_int('134.96.214.161')
 
     assert entry['user'] == 'someone'
     assert entry['time'] == datetime.strptime('27/Mar/2019:13:11:45 +0100', '%d/%b/%Y:%H:%M:%S %z')
@@ -24,7 +33,7 @@ def test_parse_tomcat_log_line():
 #TODO: make test use https://hypothesis.readthedocs.io/en/latest/quickstart.html
 def test_ip_to_int():
     ip = '134.96.214.161'
-    ip_int = ip_grep.LogEntry.ip_to_int(ip)
+    ip_int = log_parser.LogEntry.ip_to_int(ip)
     print(ip_int)
     assert ip_int > 0
 
