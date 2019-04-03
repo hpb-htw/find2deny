@@ -12,13 +12,29 @@ from .log_parser import LogEntry, DATETIME_FORMAT_PATTERN
 class AbstractIpJudgment(ABC):
 
     @abstractmethod
-    def should_deny(self, ip):
+    def should_deny(self, log_entry: LogEntry) -> bool:
         """
             check if the given ip should be blocked
-        :param ip: in integer
+        :param log_entry: in integer
         :return: True if the ip should be blocked, False if the firewall should allow ip
         """
         pass
+
+
+class PathBasedIpJudgment(AbstractIpJudgment):
+    """
+
+    """
+    def __init__(self, bot_path: set = {}):
+        self._bot_path = bot_path
+        pass
+
+    def should_deny(self, log_entry: LogEntry) -> bool:
+        request_path = log_entry.request.split(" ")[1]
+        return any(elem.startswith(request_path) for elem in self._bot_path)
+
+    def __str__(self):
+        return "PathBasedIpJudgment/bot_path:{}".format(self._bot_path)
 
 
 class TimeBasedIpJudgment(AbstractIpJudgment):
@@ -39,8 +55,6 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         :param log_entry:
         :return:
         """
-        if not self._check_precondition(log_entry):
-            return False
         conn = sqlite3.connect(self._sqlite_db_path)
         conn.row_factory = sqlite3.Row
         ip_int = log_entry.ip
@@ -48,13 +62,12 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         c = conn.cursor()
         c.execute(sql_cmd, (ip_int,))
         row = c.fetchone()
-
         conn.commit()
         conn.close()
 
         if row is None:
             logging.debug("IP %s not found in database", log_entry.ip_str)
-            self.add_log_entry(log_entry)
+            self._add_log_entry(log_entry)
             return False
         else:
             first_access = datetime.strptime(row['first_access'], DATETIME_FORMAT_PATTERN)
@@ -63,15 +76,15 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
             logging.info("%s accessed %s times in %d seconds", log_entry.ip_str, access_count, delay)
             access_rate = access_count / delay
             if access_rate > (self.allow_access / self.interval):
-                self.update_deny(log_entry, access_count)
+                self._update_deny(log_entry, access_count)
                 return True
             else:
-                self.update_access(log_entry, access_count)
+                self._update_access(log_entry, access_count)
                 return False
             pass
         pass
 
-    def add_log_entry(self, log_entry: LogEntry):
+    def _add_log_entry(self, log_entry: LogEntry):
         time_iso = log_entry['time'].strftime(DATETIME_FORMAT_PATTERN)
         sql_cmd = """INSERT INTO log_ip (ip, first_access, last_access, access_count) 
                                          VALUES (?, ?, ?, ?)"""
@@ -84,11 +97,11 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
                                        1)
                              )
         except Exception as ex:
-            print("Cannot insert new log to log_ip")
+            logging.warning("Cannot insert new log to log_ip")
         logging.info("added %s to log_ip",log_entry.ip_str)
         pass
 
-    def update_deny(self, log_entry: LogEntry, access_count: int):
+    def _update_deny(self, log_entry: LogEntry, access_count: int):
         """
         :param log_entry:
         :param access_count:
@@ -111,12 +124,12 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
                 conn.execute(insert_cmd, (ip_network, local_datetime()))
                 conn.execute(update_cmd, (ip_network, log_entry.iso_time, access_count, log_entry.ip))
         except Exception as ex:
-            print("Cannot update block_network")
+            logging.warnign("Cannot update block_network")
         # finish
         logging.info("(%s) add %s to blocked network", log_entry.ip_str, ip_network)
         pass
 
-    def update_access(self, log_entry: LogEntry, access_count: int):
+    def _update_access(self, log_entry: LogEntry, access_count: int):
         """
 
         :param log_entry:
@@ -134,9 +147,6 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         # finish
         logging.info("update access_count of %s to %s", log_entry.ip_str, access_count)
         pass
-
-    def _check_precondition(self, log_entry: LogEntry):
-        return log_entry.status == 401 or log_entry.request.split(" ")[1].startswith("/manager/")
 
     def __str__(self):
         return "TimeBasedIpBlocker/database:{}".format(self._sqlite_db_path)

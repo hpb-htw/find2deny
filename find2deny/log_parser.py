@@ -17,7 +17,11 @@ class LogEntry:
         * 'user': remote-user or None if not available
     """
 
-    def __init__(self, ip: int = 0, time: datetime = None, status: int = 0, request: str = None, byte: int = 0,
+    def __init__(self, ip: int = 0,
+                 time: datetime = None,
+                 status: int = 0,
+                 request: str = None,
+                 byte: int = 0,
                  user: str = None):
         self.__ip = ip
         self.__time = time

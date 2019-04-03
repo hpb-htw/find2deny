@@ -5,6 +5,7 @@ from datetime import datetime
 import pytest
 import logging
 
+
 from .. import log_parser
 from .. import firewall_judgment
 import sqlite3
@@ -33,7 +34,37 @@ def prepare_test_data(caplog):
     print("init database done")
 
 
-def test_should_deny__add_new_entry_to_log(prepare_test_data, caplog):
+def test_path_based_judgment_block():
+    bot_path = {"/phpMyAdmin/", "/pma/", "/myadmin", "/MyAdmin/", "/wp-login", "/webdav/", "/manager/html"}
+    blocker = firewall_judgment.PathBasedIpJudgment(bot_path)
+    entry = log_parser.LogEntry(
+        ip=log_parser.LogEntry.ip_to_int('111.21.253.2'),
+        time=datetime.strptime("2019-03-28 11:15:33.000+0100",
+                               firewall_judgment.DATETIME_FORMAT_PATTERN),
+        status=401,
+        request="GET /manager/html",
+        byte=4286
+    )
+    block = blocker.should_deny(entry)
+    assert block
+
+
+def test_path_based_judgment_free():
+    bot_path = {"/phpMyAdmin/", "/pma/", "/myadmin", "/MyAdmin/", "/wp-login", "/webdav/", "/manager/html"}
+    blocker = firewall_judgment.PathBasedIpJudgment(bot_path)
+    entry = log_parser.LogEntry(
+        ip=log_parser.LogEntry.ip_to_int('111.21.253.2'),
+        time=datetime.strptime("2019-03-28 11:15:33.000+0100",
+                               firewall_judgment.DATETIME_FORMAT_PATTERN),
+        status=401,
+        request="GET /test",
+        byte=4286
+    )
+    block = blocker.should_deny(entry)
+    assert not block
+
+
+def test_should_deny__add_new_entry_to_log(prepare_test_data):
     global test_db_path
 
     blocker = firewall_judgment.TimeBasedIpJudgment(test_db_path)
