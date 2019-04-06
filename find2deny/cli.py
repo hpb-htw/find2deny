@@ -6,4 +6,4 @@
 # 3. gebe die Befehlen aus, oder sonstiges weiter Verarbeitung
 
 def main():
-    print("main")
+    print("TODO")
