@@ -25,7 +25,6 @@ setup(name='find2deny',
       install_requires=[
           'pendulum', 'ipaddress'
       ],
-      test_suite='nose.collector',
       tests_require=['pytest', 'pytest-cov'],
       entry_points={
           'console_scripts': ['find2deny-cli=find2deny.cli:main'],
