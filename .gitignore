@@ -1,4 +1,8 @@
 .pytest_cache/
 test-data/apache2/
+test-data/apache2.*
+test-data/*.sqlite
+*.eggs*
+*.egg-info/
 __pycache__/
 .idea/
