@@ -6,8 +6,8 @@ import pytest
 import logging
 
 
-from .. import log_parser
-from .. import firewall_judgment
+from find2deny import log_parser
+from find2deny import firewall_judgment
 import sqlite3
 
 test_db_path = './test-data/ipdb.sqlite'

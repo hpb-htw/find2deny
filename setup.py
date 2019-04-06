@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 def readme():
@@ -21,7 +21,7 @@ setup(name='find2deny',
       author='Hong-Phuc Bui',
       author_email='hong-phuc.bui@htwsaar.de',
       license='MIT',
-      packages=['find2deny'],
+      packages=find_packages(),
       install_requires=[
           'pendulum', 'ipaddress'
       ],
@@ -31,4 +31,5 @@ setup(name='find2deny',
           'console_scripts': ['find2deny-cli=find2deny.cli:main'],
       },
       include_package_data=True,
-      zip_safe=False)
+      zip_safe=False
+)

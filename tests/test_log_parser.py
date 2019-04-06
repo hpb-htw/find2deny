@@ -6,7 +6,7 @@ import pytest
 import logging
 import pprint
 
-from .. import log_parser
+from find2deny import log_parser
 
 
 @pytest.fixture
