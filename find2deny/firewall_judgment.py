@@ -1,10 +1,13 @@
 #!/usr/bin/python3
 
 from abc import ABC, abstractmethod
+from typing import List
 import pendulum
 from datetime import datetime
 import sqlite3
 import logging
+
+from ipwhois import IPWhois
 
 from .log_parser import LogEntry, DATETIME_FORMAT_PATTERN
 
@@ -21,12 +24,24 @@ class AbstractIpJudgment(ABC):
         pass
 
 
+class ChainedIpJudgment(AbstractIpJudgment):
+
+    def __init__(self, chains: List[AbstractIpJudgment]):
+        self.__judgment = chains
+
+    def should_deny(self, log_entry: LogEntry) -> bool:
+        for judgment in self.__judgment:
+            if judgment.should_deny(log_entry):
+                return True
+        return False
+
+
 class PathBasedIpJudgment(AbstractIpJudgment):
     """
 
     """
-    def __init__(self, bot_path: set = {}):
-        self._bot_path = bot_path
+    def __init__(self, bot_path: set = None):
+        self._bot_path = bot_path if bot_path is not None else {}
         pass
 
     def should_deny(self, log_entry: LogEntry) -> bool:
@@ -152,10 +167,33 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         return "TimeBasedIpBlocker/database:{}".format(self._sqlite_db_path)
 
 
-def local_datetime():
+def local_datetime() -> str:
     return pendulum.now().strftime(DATETIME_FORMAT_PATTERN)
 
 
-def lookup_ip(ip):
+# Global!
+ip_network_cache = {}
+
+
+def memoize(f):
+    global ip_network_cache
+
+    def helper(x):
+        if x not in ip_network_cache:
+            logging.info("Lookup %s", x)
+            ip_network_cache[x] = f(x)
+        return ip_network_cache[x]
+    return helper
+
+
+def lookup_ip(ip: str or int) -> str:
     # TODO use whois service to lookup network of given ip
-    return "123.456.789/24"
+    str_ip = ip if isinstance(ip, str) else LogEntry.int_to_ip(ip)
+
+    @memoize
+    def __lookup_ip(normed_ip: str) -> str:
+        who = IPWhois(normed_ip).lookup_rdap()
+        return who["network"]["cidr"]
+    return __lookup_ip(str_ip)
+
+

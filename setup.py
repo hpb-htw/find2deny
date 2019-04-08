@@ -15,16 +15,16 @@ setup(
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3',
-        'Topic :: Log File Processing',
+        'Topic :: Internet :: Log Analysis'
     ],
     keywords='logfile-analyse',
     url='http://nix.nix',
     author='Hong-Phuc Bui',
     author_email='hong-phuc.bui@htwsaar.de',
     license='MIT',
-    packages=find_packages(),
+    packages=find_packages(exclude=["docs", "build", "tests"]),
     install_requires=[
-        'pendulum', 'ipaddress'
+        'pendulum', 'ipaddress', 'ipwhois'
     ],
     tests_require=['pytest', 'pytest-cov'],
     setup_requires=["pytest-runner"],

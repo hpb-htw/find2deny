@@ -2,6 +2,7 @@
 
 
 from datetime import datetime
+import time
 import pytest
 import logging
 
@@ -126,3 +127,23 @@ def test_update_access_time():
     row = c.fetchone()
     ip_count = row[0]
     assert ip_count == 5
+
+
+def test_lookup():
+    ip = "134.96.210.150"
+    expected_network = "134.96.0.0/16"
+    first_lookup_start = time.perf_counter()
+    network = firewall_judgment.lookup_ip(ip)
+    first_lookup_stop = time.perf_counter();
+    first_lookup_duration = first_lookup_stop - first_lookup_start
+    logging.info("Lookup time: %s", first_lookup_duration)
+    assert network == expected_network
+
+    cache_lookup_start = time.perf_counter()
+    network_cache = firewall_judgment.lookup_ip(log_parser.LogEntry.ip_to_int(ip))
+    cache_lookup_stop = time.perf_counter()
+    cache_lookup_duration = cache_lookup_stop - cache_lookup_start
+    logging.info("Caching time: %s", cache_lookup_duration)
+    assert network_cache == expected_network
+
+    assert cache_lookup_duration <= first_lookup_duration
