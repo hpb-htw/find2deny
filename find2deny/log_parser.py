@@ -167,7 +167,7 @@ class LogEntry:
         )
 
 
-def grep_tomcat_access_log(tomcat_access_path, log_pattern):
+def parse_log_file(tomcat_access_path, log_pattern):
     """
     gibt eine Liste von IP in `tomcat_access_path'-Datei zurück, welche als Angriff
     eingestuft wird.

@@ -20,7 +20,9 @@ time-database-path=<path to a sqlite database>
 ``` 
 
 
-## Log Pattern
+## Log Pattern (`log_pattern`)
+
+TODO!
 
 ## Judgment Chain (`judgments_chain`)
 
@@ -30,16 +32,15 @@ of the Judgment is significant.
 
 Implemented Judgments (for now) are:
 
-### Path based Judgment
+### Path based Judgment (`path-based-judgment`)
 
-* name: 'path-based-judgment'
-* description: an IP in a log entry is as a bot classified when it hast a request that begins
-  with one of the list in config `judgment.bot-request`
+An IP in a log entry is as a bot classified when it hast a request that begins
+with one of the list in config `judgment/bot-request`
 
-### Time based Judgment
+### Time based Judgment (`time-based-judgment`)
 
-* name: 'time-based-judgment'
-* description: an IP in a log entry is as a bot classified when it make more than `judgment.max-request` HTTP-request
-in a given (`judgment.interval-second`) in seconds. To calculate the time interval from the first recognized request
+
+an IP in a log entry is as a bot classified when it make more than `judgment.max-request` HTTP-request
+in a given (`judgment/interval-second`) in seconds. To calculate the time interval from the first recognized request
 to last request of the IP in the log files, this judgment use a SQLite file which is configured by `time-database-path`
 This file is automatically created if it does not exist.

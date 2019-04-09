@@ -6,3 +6,5 @@ test-data/*.sqlite
 *.egg-info/
 __pycache__/
 .idea/
+__version__
+venv/
