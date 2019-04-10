@@ -167,12 +167,12 @@ class LogEntry:
         )
 
 
-def parse_log_file(tomcat_access_path, log_pattern):
+def parse_log_file(log_file_path, log_pattern):
     """
     gibt eine Liste von IP in `tomcat_access_path'-Datei zurück, welche als Angriff
     eingestuft wird.
 
-    @param tomcat_access_path: path zur Access Logfile von Tomcat, in der Regel ist die Datei ${CATALINA_BASE}/logs/localhost_access${date}.txt
+    @param log_file_path: path zur Access Logfile von Tomcat, in der Regel ist die Datei ${CATALINA_BASE}/logs/localhost_access${date}.txt
 
     @param log_pattern: Wie in der Doku von Tomcat beschrieben (https://tomcat.apache.org/tomcat-9.0-doc/config/valve.html#Access_Logging),
     z.B:
@@ -184,7 +184,7 @@ def parse_log_file(tomcat_access_path, log_pattern):
     log_pattern = log_pattern.replace('&quot;', '"').split(' ')
     logs = []
     num_of_line = 0
-    with open(tomcat_access_path) as logfile:
+    with open(log_file_path) as logfile:
         line = logfile.readline()
         num_of_line += 1
         while line:

@@ -4,9 +4,9 @@ import logging
 import configparser
 import glob
 
-from typing import Mapping, List, Dict
+from typing import List, Dict
 
-from . import firewall_judgment
+from . import firewall_judgment, log_parser
 
 # work-flow
 # 1. suche alle IP in Logfile nach Merkmale eines Angriff
@@ -75,11 +75,20 @@ def do_the_job(argv):
         effective_config = {**file_config, **effective_config}
 
     # Use config
-    logging.basicConfig(level=logging.getLevelName(effective_config[VERBOSITY]))
-    logging.info("Verbosity: %s", effective_config[VERBOSITY])
+    log_level = logging.getLevelName(effective_config[VERBOSITY])
+    logging.getLogger().setLevel(level=log_level)
+    logging.info("Verbosity: %s %d", effective_config[VERBOSITY], log_level)
     log_files = expand_log_files(effective_config)
+    logging.info(log_files)
     judgment = construct_judgment(effective_config)
+    log_pattern = effective_config[LOG_PATTERN]
 
+    for file_path in log_files:
+        logging.info("Analyse file %s", file_path)
+        logs = log_parser.parse_log_file(file_path, log_pattern)
+        for log in logs:
+            if judgment.should_deny(log):
+                logging.info("Deny %s", log.ip)
     return 0
 
 
@@ -124,7 +133,10 @@ def expand_log_files(config: Dict) -> List:
         log_files = []
         for p in config_log_file:
             expand_path = glob.glob(p)
-            log_files += expand_path
+            logging.debug("expand glob '%s' to %s", p, expand_path)
+            if len(expand_path) == 0:
+                logging.warn("Glob path '%s' cannot be expanded to any real path", p)
+            log_files = log_files + expand_path
         return log_files
     else:
         raise ParserConfigException("Log files are not configured")

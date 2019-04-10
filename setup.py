@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 
 def readme():
-    with open('README.md') as f:
+    with open('README.rst') as f:
         return f.read()
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -33,7 +33,7 @@ setup(
         'Topic :: Internet :: Log Analysis'
     ],
     keywords='logfile-analyse',
-    url='http://nix.nix',
+    url='http://mathcoach.htwsaar.de/mathcoach',
     author='Hong-Phuc Bui',
     author_email='hong-phuc.bui@htwsaar.de',
     license='MIT',

@@ -41,3 +41,10 @@ clean: clean-pyc
 	rm -rf .eggs .pytest_cache find2deny.egg-info dist build __version__
 	rm -f venv/bin/find2deny-cli
 
+# Auxiliary target
+
+.PHONY: setup-dist-tool
+setup-dist-tool:
+	python -m pip install setuptools wheel twine
+
+

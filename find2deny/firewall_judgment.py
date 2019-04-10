@@ -63,6 +63,7 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         self.allow_access = allow_access
         self.interval = interval_second
         self._sqlite_db_path = path
+        self.__init_db()
 
     def should_deny(self, log_entry: LogEntry) -> bool:
         """
@@ -166,6 +167,8 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
     def __str__(self):
         return "TimeBasedIpBlocker/database:{}".format(self._sqlite_db_path)
 
+    def __init_db(self):
+        pass
 
 def local_datetime() -> str:
     return pendulum.now().strftime(DATETIME_FORMAT_PATTERN)

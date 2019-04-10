@@ -1,17 +1,18 @@
+/*
 DROP TABLE IF EXISTS log_ip;
 DROP TABLE IF EXISTS block_network;
+*/
 
-
-CREATE TABLE block_network (
+CREATE TABLE IF NOT EXISTS block_network (
     ip_network TEXT PRIMARY KEY,
-    block_since TEXT      /* ISO8601 Format */
+    block_since TEXT
 );
 
-CREATE TABLE log_ip (
+CREATE TABLE IF NOT EXISTS log_ip (
     ip INTEGER PRIMARY KEY,
     ip_network DEFAULT NULL REFERENCES block_network(ip_network) ,
-    first_access TEXT,     /* ISO8601 Format */
-    last_access TEXT,      /* ISO8601 Format */
+    first_access TEXT,
+    last_access TEXT,
     access_count INTEGER,
     status INTEGER DEFAULT 0
 );

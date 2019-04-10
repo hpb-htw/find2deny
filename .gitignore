@@ -8,3 +8,6 @@ __pycache__/
 .idea/
 __version__
 venv/
+build/
+dist/
+*.sqlite
