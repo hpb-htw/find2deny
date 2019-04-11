@@ -6,7 +6,7 @@ import glob
 
 from typing import List, Dict
 
-from . import firewall_judgment, log_parser
+from . import judgment, log_parser
 
 # work-flow
 # 1. suche alle IP in Logfile nach Merkmale eines Angriff
@@ -73,7 +73,7 @@ def do_the_job(argv):
     logging.getLogger().setLevel(level=log_level)
     logging.info("Verbosity: %s %d", effective_config[VERBOSITY], log_level)
     # init database
-    firewall_judgment.init_database(effective_config[DATABASE_PATH])
+    judgment.init_database(effective_config[DATABASE_PATH])
     log_files = expand_log_files(effective_config)
     logging.info(log_files)
     judgment = construct_judgment(effective_config)
@@ -83,7 +83,7 @@ def do_the_job(argv):
         logging.debug("Analyse file %s", file_path)
         logs = log_parser.parse_log_file(file_path, log_pattern)
         for log in logs:
-            if firewall_judgment.is_ready_blocked(log, effective_config[DATABASE_PATH]):
+            if judgment.is_ready_blocked(log, effective_config[DATABASE_PATH]):
                 logging.info("IP %s is ready blocked", log.ip_str)
             elif judgment.should_deny(log):
                 logging.info("Deny %s", log.ip_str)
@@ -151,21 +151,21 @@ def expand_log_files(config: Dict) -> List:
         raise ParserConfigException("Log files are not configured")
 
 
-def construct_judgment(config: Dict) -> firewall_judgment.AbstractIpJudgment:
+def construct_judgment(config: Dict) -> judgment.AbstractIpJudgment:
     judgments_chain = config[JUDGMENTS_CHAIN] if JUDGMENTS_CHAIN in config else []
     if len(judgments_chain) < 1:
         parser.error(f"At least one of {JUDGMENTS_CHAIN} must be given")
     list_of_judgments = []
     for n in judgments_chain:
         list_of_judgments.append(judgment_by_name(n, config))
-    return firewall_judgment.ChainedIpJudgment(config[DATABASE_PATH], list_of_judgments)
+    return judgment.ChainedIpJudgment(config[DATABASE_PATH], list_of_judgments)
 
 
 def judgment_by_name(name, config):
     if name == "path-based-judgment":
         bot_request_path = config[BOT_REQUEST] if BOT_REQUEST in config else []
         if len(bot_request_path) > 0:
-            return firewall_judgment.PathBasedIpJudgment(bot_request_path)
+            return judgment.PathBasedIpJudgment(bot_request_path)
         else:
             parser.error(f"At least one path in {BOT_REQUEST} must be configured if Judgment {name} is used")
     elif name == "time-based-judgment":
@@ -173,7 +173,7 @@ def judgment_by_name(name, config):
             database_path = config[DATABASE_PATH]
             max_request = config[MAX_REQUEST] if MAX_REQUEST in config else 500
             interval = config[INTERVAL_SECONDS] if INTERVAL_SECONDS in config else 60
-            return firewall_judgment.TimeBasedIpJudgment(database_path, max_request, interval)
+            return judgment.TimeBasedIpJudgment(database_path, max_request, interval)
         else:
             parser.error(f"A SQLite database ({DATABASE_PATH}) must be configured if Judgment {name} is used")
     else:

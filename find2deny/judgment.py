@@ -227,14 +227,12 @@ def local_datetime() -> str:
 
 
 def lookup_ip(ip: str or int) -> str:
-    # TODO use whois service to lookup network of given ip
     str_ip = ip if isinstance(ip, str) else LogEntry.int_to_ip(ip)
-
-    @functools.lru_cache(maxsize=None)
-    def __lookup_ip(normed_ip: str) -> str:
-        who = IPWhois(normed_ip).lookup_rdap()
-        return who["network"]["cidr"]
     return __lookup_ip(str_ip)
 
 
+@functools.lru_cache(maxsize=128)
+def __lookup_ip(normed_ip: str) -> str:
+    who = IPWhois(normed_ip).lookup_rdap()
+    return who["network"]["cidr"]
 
