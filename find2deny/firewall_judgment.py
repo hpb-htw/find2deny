@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-
+import functools
 from abc import ABC, abstractmethod
 from typing import List
 import pendulum
@@ -8,8 +8,51 @@ import sqlite3
 import logging
 
 from ipwhois import IPWhois
+from importlib_resources import read_text
 
 from .log_parser import LogEntry, DATETIME_FORMAT_PATTERN
+
+
+def init_database(sqlite_db_path: str):
+    sql_script = read_text("find2deny", "log-data.sql")
+    conn = sqlite3.connect(sqlite_db_path)
+    try:
+        with conn:
+            conn.executescript(sql_script)
+    except Exception as ex:
+        logging.warning("Cannot init database in sqlite file %s", sqlite_db_path)
+    pass
+
+
+def is_ready_blocked(log_entry: LogEntry, sqlite_db_path: str):
+    @functools.lru_cache(maxsize=128)
+    def __cached_query(ip: int):
+        conn = sqlite3.connect(sqlite_db_path)
+        with conn:
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM block_network WHERE ip = ?", (ip,))
+            row = c.fetchone()
+            ip_count = row[0]
+            return ip_count == 1
+
+    return __cached_query(log_entry.ip)
+
+
+def update_deny(ip_network: str, log_entry: LogEntry, sqlite_db_path: str):
+    # Prepare data
+    # ip_network = lookup_ip(log_entry.ip)
+    insert_cmd = """INSERT OR IGNORE INTO block_network (ip, ip_network, block_since) VALUES (?, ?, ?)"""
+
+    conn = sqlite3.connect(sqlite_db_path)
+    # Begin Transaction
+    try:
+        with conn:
+            conn.execute(insert_cmd, (log_entry.ip, ip_network, local_datetime()))
+    except Exception as ex:
+        logging.warning("Cannot update block_network")
+    # finish
+    logging.info("(%s) add %s to blocked network", log_entry.ip_str, ip_network)
+    pass
 
 
 class AbstractIpJudgment(ABC):
@@ -26,14 +69,28 @@ class AbstractIpJudgment(ABC):
 
 class ChainedIpJudgment(AbstractIpJudgment):
 
-    def __init__(self, chains: List[AbstractIpJudgment]):
+    def __init__(self, log_db_path: str, chains: List[AbstractIpJudgment]):
         self.__judgment = chains
+        self.__log_db_path = log_db_path
 
     def should_deny(self, log_entry: LogEntry) -> bool:
+        if is_ready_blocked(log_entry, self.__log_db_path):
+            return True
         for judgment in self.__judgment:
             if judgment.should_deny(log_entry):
+                ip_network = lookup_ip(log_entry.ip)
+                update_deny(ip_network, log_entry, self.__log_db_path)
                 return True
         return False
+
+    def _is_ready_blocked(self, log_entry: LogEntry):
+        conn = sqlite3.connect(self.__log_db_path)
+        with conn:
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM block_network WHERE ip = ?", (log_entry.ip,))
+            row = c.fetchone()
+            ip_count = row[0]
+            return ip_count == 1
 
 
 class PathBasedIpJudgment(AbstractIpJudgment):
@@ -63,7 +120,6 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         self.allow_access = allow_access
         self.interval = interval_second
         self._sqlite_db_path = path
-        self.__init_db()
 
     def should_deny(self, log_entry: LogEntry) -> bool:
         """
@@ -82,16 +138,17 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         conn.close()
 
         if row is None:
-            logging.debug("IP %s not found in database", log_entry.ip_str)
+            logging.debug("IP %s not found in log_ip", log_entry.ip_str)
             self._add_log_entry(log_entry)
             return False
         else:
             first_access = datetime.strptime(row['first_access'], DATETIME_FORMAT_PATTERN)
             delay = (log_entry.time - first_access).total_seconds()
             access_count = row['access_count'] + 1
-            logging.info("%s accessed %s times in %d seconds", log_entry.ip_str, access_count, delay)
-            access_rate = access_count / delay
-            if access_rate > (self.allow_access / self.interval):
+            logging.info("%s accessed %s %s times in %d seconds", log_entry.ip_str, log_entry.request, access_count, delay)
+            limit_rate = self.allow_access / self.interval
+            access_rate = access_count / delay if delay > 0 else limit_rate
+            if access_rate >= limit_rate:
                 self._update_deny(log_entry, access_count)
                 return True
             else:
@@ -125,7 +182,6 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         """
         # Prepare data
         ip_network = lookup_ip(log_entry.ip)
-        insert_cmd = """INSERT OR IGNORE INTO block_network (ip_network, block_since) VALUES (?, ?)"""
         update_cmd = """UPDATE log_ip SET 
             ip_network = ?,
             last_access = ?,
@@ -137,12 +193,10 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         # Begin Transaction
         try:
             with conn:
-                conn.execute(insert_cmd, (ip_network, local_datetime()))
                 conn.execute(update_cmd, (ip_network, log_entry.iso_time, access_count, log_entry.ip))
         except Exception as ex:
-            logging.warnign("Cannot update block_network")
+            logging.warning("Cannot update block_network")
         # finish
-        logging.info("(%s) add %s to blocked network", log_entry.ip_str, ip_network)
         pass
 
     def _update_access(self, log_entry: LogEntry, access_count: int):
@@ -167,36 +221,20 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
     def __str__(self):
         return "TimeBasedIpBlocker/database:{}".format(self._sqlite_db_path)
 
-    def __init_db(self):
-        pass
 
 def local_datetime() -> str:
     return pendulum.now().strftime(DATETIME_FORMAT_PATTERN)
-
-
-# Global!
-ip_network_cache = {}
-
-
-def memoize(f):
-    global ip_network_cache
-
-    def helper(x):
-        if x not in ip_network_cache:
-            logging.info("Lookup %s", x)
-            ip_network_cache[x] = f(x)
-        return ip_network_cache[x]
-    return helper
 
 
 def lookup_ip(ip: str or int) -> str:
     # TODO use whois service to lookup network of given ip
     str_ip = ip if isinstance(ip, str) else LogEntry.int_to_ip(ip)
 
-    @memoize
+    @functools.lru_cache(maxsize=None)
     def __lookup_ip(normed_ip: str) -> str:
         who = IPWhois(normed_ip).lookup_rdap()
         return who["network"]["cidr"]
     return __lookup_ip(str_ip)
+
 
 

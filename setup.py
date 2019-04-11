@@ -39,7 +39,7 @@ setup(
     license='MIT',
     packages=find_packages(exclude=["docs", "build", "tests"]),
     install_requires=[
-        'pendulum', 'ipaddress', 'ipwhois'
+        'pendulum', 'ipaddress', 'ipwhois', 'importlib_resources'
     ],
     tests_require=['pytest', 'pytest-runner', 'pytest-cov'],
     setup_requires=["pytest-runner"],

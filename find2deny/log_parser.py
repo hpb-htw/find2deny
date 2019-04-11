@@ -229,10 +229,10 @@ def parser_tomcat_log_line(log_line, pattern):
             entry.byte = int(entry_value)
         else:
             (entry_value, line_idx) = _parser_word(log_line, line_idx)
-            logging.info("ignore pattern %s", value)
+            logging.debug("ignore pattern %s", value)
 
     # update ip at the last attribute
-    logging.debug("host -> %s proxy %s", host, proxy_host)
+    logging.debug("host=%s proxy=%s", host, proxy_host)
     if proxy_host is not None:
         logging.debug("use proxy_host %s", proxy_host)
         entry.ip = LogEntry.ip_to_int(proxy_host)

@@ -5,19 +5,29 @@ from find2deny import cli
 
 def test_parse_argv():
     argv = ["--verbosity", "DEBUG", "test-data/rules.cfg"]
-    cli.do_the_job(argv)
-    assert cli.effective_config["verbosity"] == "DEBUG"
-    assert cli.effective_config["log_files"][0] == "test_data/apache2/access.log.8"
-    assert cli.effective_config["log_pattern"] == '%h %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i"'
-    assert cli.effective_config["judgments_chain"] == ["path-based-judgment", "time-based-judgment"]
-    assert len(cli.effective_config["bot_request"]) == 14
-    assert cli.effective_config["max_request"] == 501
-    assert cli.effective_config["interval_seconds"] == 59
+    cli_config = cli.parse_arg(argv)
+    effective_config = cli.merge_config(cli_config)
+
+    assert effective_config["verbosity"] == "DEBUG"
+    assert effective_config["log_files"][0] == "test-data/apache2/access.log.8"
+    assert effective_config["log_pattern"] == '%h %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i"'
+    assert effective_config["judgments_chain"] == ["path-based-judgment", "time-based-judgment"]
+    assert len(effective_config["bot_request"]) >= 14
+    assert effective_config["max_request"] == 501
+    assert effective_config["interval_seconds"] == 59
 
 
 def test_parse_argv_no_option():
     argv = ["test-data/rules.cfg"]
-    cli.do_the_job(argv)
+    cli_config = cli.parse_arg(argv)
+    effective_config = cli.merge_config(cli_config)
+    assert effective_config["verbosity"] == "INFO"
+    assert effective_config["log_files"][0] == "test-data/apache2/access.log.8"
+    assert effective_config["log_pattern"] == '%h %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i"'
+    assert effective_config["judgments_chain"] == ["path-based-judgment", "time-based-judgment"]
+    assert len(effective_config["bot_request"]) >= 14
+    assert effective_config["max_request"] == 501
+    assert effective_config["interval_seconds"] == 59
 
 '''
 def test_help():

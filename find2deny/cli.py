@@ -66,29 +66,27 @@ def do_the_job(argv):
     if len(argv) < 1:
         parser.error(ambiguous_config)
     cli_config = parse_arg(argv)
-    # Feed effective_config with cli-configurations
-    effective_config = {k:v for k, v in cli_config.items() if v is not None}
-    if cli_config[CONF_FILE] is not None:
-        conf_file = cli_config[CONF_FILE]
-        logging.info("Use additional configuration from file '%s'", conf_file)
-        file_config = parse_config_file(conf_file)
-        effective_config = {**file_config, **effective_config}
+    effective_config = merge_config(cli_config)
 
     # Use config
     log_level = logging.getLevelName(effective_config[VERBOSITY])
     logging.getLogger().setLevel(level=log_level)
     logging.info("Verbosity: %s %d", effective_config[VERBOSITY], log_level)
+    # init database
+    firewall_judgment.init_database(effective_config[DATABASE_PATH])
     log_files = expand_log_files(effective_config)
     logging.info(log_files)
     judgment = construct_judgment(effective_config)
     log_pattern = effective_config[LOG_PATTERN]
-
+    # make block
     for file_path in log_files:
-        logging.info("Analyse file %s", file_path)
+        logging.debug("Analyse file %s", file_path)
         logs = log_parser.parse_log_file(file_path, log_pattern)
         for log in logs:
-            if judgment.should_deny(log):
-                logging.info("Deny %s", log.ip)
+            if firewall_judgment.is_ready_blocked(log, effective_config[DATABASE_PATH]):
+                logging.info("IP %s is ready blocked", log.ip_str)
+            elif judgment.should_deny(log):
+                logging.info("Deny %s", log.ip_str)
     return 0
 
 
@@ -96,6 +94,17 @@ def parse_arg(argv: List[str]) -> Dict:
     args = parser.parse_args(argv)
     result = dict(vars(args))
     return result
+
+
+def merge_config(cli_config: Dict) -> Dict:
+    # init merged config with cli-configurations
+    merged_config = {k: v for k, v in cli_config.items() if v is not None}
+    if cli_config[CONF_FILE] is not None:
+        conf_file = cli_config[CONF_FILE]
+        logging.info("Use additional configuration from file '%s'", conf_file)
+        file_config = parse_config_file(conf_file)
+        merged_config = {**file_config, **merged_config}
+    return merged_config
 
 
 def parse_config_file(file_path) -> Dict:
@@ -149,7 +158,7 @@ def construct_judgment(config: Dict) -> firewall_judgment.AbstractIpJudgment:
     list_of_judgments = []
     for n in judgments_chain:
         list_of_judgments.append(judgment_by_name(n, config))
-    return firewall_judgment.ChainedIpJudgment(list_of_judgments)
+    return firewall_judgment.ChainedIpJudgment(config[DATABASE_PATH], list_of_judgments)
 
 
 def judgment_by_name(name, config):

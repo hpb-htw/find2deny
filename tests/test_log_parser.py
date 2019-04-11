@@ -11,8 +11,8 @@ from find2deny import log_parser
 
 @pytest.fixture
 def prepare_test_data(caplog):
-    caplog.set_level(logging.DEBUG)
-    logging.basicConfig(level=logging.DEBUG)
+    caplog.set_level(logging.INFO)
+    logging.basicConfig(level=logging.INFO)
     logging.debug("prepare_test done")
 
 
