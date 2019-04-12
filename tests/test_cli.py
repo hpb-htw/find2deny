@@ -29,15 +29,10 @@ def test_parse_argv_no_option():
     assert effective_config["max_request"] == 501
     assert effective_config["interval_seconds"] == 59
 
-'''
-def test_help():
-    argv = ["-h"]
-    cli.do_the_job(argv)
-'''
 
 def test_expand_logfiles():
-    config = {cli.LOG_FILES: ["test-data/apache2/*.gz"]}
-    log_files = cli.expand_log_files(config)
+    blob_logs = ["test-data/apache2/*.gz"]
+    log_files = cli.expand_log_files(blob_logs)
     assert len(log_files) > 1
 
 

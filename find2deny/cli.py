@@ -6,6 +6,8 @@ import glob
 
 from typing import List, Dict
 
+from config_parser import ParserConfigException, VERBOSITY, LOG_FILES, LOG_PATTERN, DATABASE_PATH, JUDGMENTS_CHAIN, \
+    BOT_REQUEST, MAX_REQUEST, INTERVAL_SECONDS, UFW_PATH, CONF_FILE, LOG_LEVELS, JUDGMENTS
 from . import log_parser
 from . import judgment
 from . import execution
@@ -16,25 +18,12 @@ from . import execution
 # 3. gebe die Befehlen aus, oder sonstiges weiter Verarbeitung
 
 # CLI options:
-VERBOSITY = "verbosity"
-LOG_FILES = "log_files"
-LOG_PATTERN = "log_pattern"
-DATABASE_PATH = "database_path"
 
 # [judgment]
-JUDGMENTS_CHAIN = "judgments_chain"
-BOT_REQUEST = "bot_request"
-MAX_REQUEST = "max_request"
-INTERVAL_SECONDS = "interval_seconds"
 
 # []
-UFW_PATH="ufw_cmd_script"
 
 # Config File
-CONF_FILE = "config_file"
-
-LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-JUDGMENTS = ["path-based-judgment", "time-based-judgment"]
 
 #effective_config = {}
 
@@ -69,35 +58,19 @@ def main():
 
 
 def do_the_job(argv):
-    #global effective_config
     logging.basicConfig(level=logging.INFO)
     ambiguous_config = f"Configuration must be given either by a configuration file [{CONF_FILE}] or by CLI option"
     if len(argv) < 1:
         parser.error(ambiguous_config)
     cli_config = parse_arg(argv)
     effective_config = merge_config(cli_config)
+    validate_config(effective_config)
 
-    apply_log_config(effective_config)
+    apply_log_config(effective_config[VERBOSITY])
 
     # init database
     judgment.init_database(effective_config[DATABASE_PATH])
     # make block
-    '''
-    log_files = expand_log_files(effective_config)
-    logging.info(log_files)
-    judge = construct_judgment(effective_config)
-    log_pattern = effective_config[LOG_PATTERN]
-    for file_path in log_files:
-        logging.debug("Analyse file %s", file_path)
-        logs = log_parser.parse_log_file(file_path, log_pattern)
-        for log in logs:
-            if judgment.is_ready_blocked(log, effective_config[DATABASE_PATH]):
-                logging.info("IP %s is ready blocked", log.ip_str)
-            elif judge.should_deny(log):
-                network = judgment.lookup_ip(log.ip_str)
-                log.network = network
-                logging.info("Deny %s", network)
-    '''
     analyse_log_files(effective_config)
     return 0
 
@@ -141,36 +114,19 @@ def parse_config_file(file_path) -> Dict:
         raise ParserConfigException(f"File {file_path} not exist (working dir {os.getcwd()})", ex)
 
 
-class ParserConfigException(Exception):
-    def __init__(self, message, errors=None):
-        self.message = message
-        self.errors = errors
-        super(ParserConfigException, self).__init__(message)
-
-
-def expand_log_files(config: Dict) -> List:
-    if LOG_FILES in config:
-        config_log_file = config[LOG_FILES]
-        log_files = []
-        for p in config_log_file:
-            expand_path = glob.glob(p)
-            logging.debug("expand glob '%s' to %s", p, expand_path)
-            if len(expand_path) == 0:
-                logging.warn("Glob path '%s' cannot be expanded to any real path", p)
-            log_files = log_files + expand_path
-        return log_files
-    else:
+def validate_config(config: Dict):
+    if LOG_FILES not in config:
         raise ParserConfigException("Log files are not configured")
 
 
-def apply_log_config(config: Dict):
-    log_level = logging.getLevelName(config[VERBOSITY])
+def apply_log_config(verbosity: str):
+    log_level = logging.getLevelName(verbosity)
     logging.getLogger().setLevel(level=log_level)
-    logging.info("Verbosity: %s %d", config[VERBOSITY], log_level)
+    logging.info("Verbosity: %s %d", verbosity, log_level)
 
 
 def analyse_log_files(config: Dict):
-    log_files = expand_log_files(config)
+    log_files = expand_log_files(config[LOG_FILES])
     logging.info(log_files)
     judge = construct_judgment(config)
     executor = execution.FileBasedUWFBlock(config[UFW_PATH])
@@ -187,6 +143,17 @@ def analyse_log_files(config: Dict):
                 log.network = network
                 executor.block(log)
     executor.end_execute()
+
+
+def expand_log_files(config_log_file: List[str]) -> List:
+    log_files = []
+    for p in config_log_file:
+        expand_path = glob.glob(p)
+        logging.debug("expand glob '%s' to %s", p, expand_path)
+        if len(expand_path) == 0:
+            logging.warn("Glob path '%s' cannot be expanded to any real path", p)
+        log_files = log_files + expand_path
+    return log_files
 
 
 def construct_judgment(config: Dict) -> judgment.AbstractIpJudgment:
