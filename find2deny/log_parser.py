@@ -18,12 +18,14 @@ class LogEntry:
     """
 
     def __init__(self, ip: int = 0,
+                 network: str = None,
                  time: datetime = None,
                  status: int = 0,
                  request: str = None,
                  byte: int = 0,
                  user: str = None):
         self.__ip = ip
+        self.__network = network
         self.__time = time
         self.__status = status
         self.__request = request
@@ -52,6 +54,23 @@ class LogEntry:
         elif type(ip) == int:
             self.__ip = ip
         pass
+
+    @property
+    def network(self) -> str:
+        """
+            the network of ip of this Log, may be None
+        :return:
+        """
+        return self.__network
+
+    @network.setter
+    def network(self, network: str):
+        """
+            set network for the ip of this Log
+        :param network:
+        :return:
+        """
+        self.__network = network
 
     @property
     def time(self) -> datetime:

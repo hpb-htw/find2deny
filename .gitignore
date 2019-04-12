@@ -11,3 +11,4 @@ venv/
 build/
 dist/
 *.sqlite
+block-ip.sh

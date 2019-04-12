@@ -5,6 +5,10 @@ version = 0.1.1
 compile = python3 setup.py sdist bdist_wheel
 python_files = $(shell find find2deny -name "*.py")
 
+sqlite-db=dummy-db.sqlite
+ufw-shell-file=block-ip.sh
+
+
 .PHONY: dev-release
 dev-release: dev-compile
 	python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
@@ -46,7 +50,13 @@ clean: clean-pyc
 	rm -rf .eggs .pytest_cache find2deny.egg-info dist build __version__
 	rm -f venv/bin/find2deny-cli
 
+.PHONY: clean-all
+clean-all: clean
+	rm -f $(sqlite-db) $(ufw-shell-file)
 
+.PHONY: run-example
+run-example:
+	find2deny-cli test-data/rules.cfg
 
 # Auxiliary target
 .PHONY: setup-dist-tool

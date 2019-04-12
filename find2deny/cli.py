@@ -6,7 +6,9 @@ import glob
 
 from typing import List, Dict
 
-from . import judgment, log_parser
+from . import log_parser
+from . import judgment
+from . import execution
 
 # work-flow
 # 1. suche alle IP in Logfile nach Merkmale eines Angriff
@@ -17,12 +19,16 @@ from . import judgment, log_parser
 VERBOSITY = "verbosity"
 LOG_FILES = "log_files"
 LOG_PATTERN = "log_pattern"
+DATABASE_PATH = "database_path"
+
 # [judgment]
 JUDGMENTS_CHAIN = "judgments_chain"
 BOT_REQUEST = "bot_request"
 MAX_REQUEST = "max_request"
 INTERVAL_SECONDS = "interval_seconds"
-DATABASE_PATH = "database_path"
+
+# []
+UFW_PATH="ufw_cmd_script"
 
 # Config File
 CONF_FILE = "config_file"
@@ -30,7 +36,7 @@ CONF_FILE = "config_file"
 LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 JUDGMENTS = ["path-based-judgment", "time-based-judgment"]
 
-effective_config = {}
+#effective_config = {}
 
 parser = argparse.ArgumentParser()
 parser.add_argument(f"{CONF_FILE}", type=str,
@@ -52,6 +58,9 @@ parser.add_argument(f"--{MAX_REQUEST}", type=int,
                     help="maximum request in a time-interval, given by '--interval_seconds'")
 parser.add_argument(f"--{INTERVAL_SECONDS}", type=int,
                     help="time interval in seconds for a given maximum number of request")
+# [execution]
+parser.add_argument(f"--{UFW_PATH}",
+                    help="output path to a shell script, where UFW deny commands are written")
 
 
 def main():
@@ -60,7 +69,7 @@ def main():
 
 
 def do_the_job(argv):
-    global effective_config
+    #global effective_config
     logging.basicConfig(level=logging.INFO)
     ambiguous_config = f"Configuration must be given either by a configuration file [{CONF_FILE}] or by CLI option"
     if len(argv) < 1:
@@ -68,25 +77,28 @@ def do_the_job(argv):
     cli_config = parse_arg(argv)
     effective_config = merge_config(cli_config)
 
-    # Use config
-    log_level = logging.getLevelName(effective_config[VERBOSITY])
-    logging.getLogger().setLevel(level=log_level)
-    logging.info("Verbosity: %s %d", effective_config[VERBOSITY], log_level)
+    apply_log_config(effective_config)
+
     # init database
     judgment.init_database(effective_config[DATABASE_PATH])
+    # make block
+    '''
     log_files = expand_log_files(effective_config)
     logging.info(log_files)
-    judgment = construct_judgment(effective_config)
+    judge = construct_judgment(effective_config)
     log_pattern = effective_config[LOG_PATTERN]
-    # make block
     for file_path in log_files:
         logging.debug("Analyse file %s", file_path)
         logs = log_parser.parse_log_file(file_path, log_pattern)
         for log in logs:
             if judgment.is_ready_blocked(log, effective_config[DATABASE_PATH]):
                 logging.info("IP %s is ready blocked", log.ip_str)
-            elif judgment.should_deny(log):
-                logging.info("Deny %s", log.ip_str)
+            elif judge.should_deny(log):
+                network = judgment.lookup_ip(log.ip_str)
+                log.network = network
+                logging.info("Deny %s", network)
+    '''
+    analyse_log_files(effective_config)
     return 0
 
 
@@ -149,6 +161,32 @@ def expand_log_files(config: Dict) -> List:
         return log_files
     else:
         raise ParserConfigException("Log files are not configured")
+
+
+def apply_log_config(config: Dict):
+    log_level = logging.getLevelName(config[VERBOSITY])
+    logging.getLogger().setLevel(level=log_level)
+    logging.info("Verbosity: %s %d", config[VERBOSITY], log_level)
+
+
+def analyse_log_files(config: Dict):
+    log_files = expand_log_files(config)
+    logging.info(log_files)
+    judge = construct_judgment(config)
+    executor = execution.FileBasedUWFBlock(config[UFW_PATH])
+    executor.begin_execute()
+    log_pattern = config[LOG_PATTERN]
+    for file_path in log_files:
+        logging.debug("Analyse file %s", file_path)
+        logs = log_parser.parse_log_file(file_path, log_pattern)
+        for log in logs:
+            if judgment.is_ready_blocked(log, config[DATABASE_PATH]):
+                logging.info("IP %s is ready blocked", log.ip_str)
+            elif judge.should_deny(log):
+                network = judgment.lookup_ip(log.ip_str)
+                log.network = network
+                executor.block(log)
+    executor.end_execute()
 
 
 def construct_judgment(config: Dict) -> judgment.AbstractIpJudgment:

@@ -41,7 +41,7 @@ def is_ready_blocked(log_entry: LogEntry, sqlite_db_path: str):
 def update_deny(ip_network: str, log_entry: LogEntry, sqlite_db_path: str):
     # Prepare data
     # ip_network = lookup_ip(log_entry.ip)
-    insert_cmd = """INSERT OR IGNORE INTO block_network (ip, ip_network, block_since) VALUES (?, ?, ?)"""
+    insert_cmd = "INSERT OR IGNORE INTO block_network (ip, ip_network, block_since) VALUES (?, ?, ?)"
 
     conn = sqlite3.connect(sqlite_db_path)
     # Begin Transaction
@@ -82,15 +82,6 @@ class ChainedIpJudgment(AbstractIpJudgment):
                 update_deny(ip_network, log_entry, self.__log_db_path)
                 return True
         return False
-
-    def _is_ready_blocked(self, log_entry: LogEntry):
-        conn = sqlite3.connect(self.__log_db_path)
-        with conn:
-            c = conn.cursor()
-            c.execute("SELECT COUNT(*) FROM block_network WHERE ip = ?", (log_entry.ip,))
-            row = c.fetchone()
-            ip_count = row[0]
-            return ip_count == 1
 
 
 class PathBasedIpJudgment(AbstractIpJudgment):
