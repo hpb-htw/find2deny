@@ -1,4 +1,6 @@
 import os, codecs, re
+
+from idna import package_data
 from setuptools import setup, find_packages
 
 
@@ -38,6 +40,12 @@ setup(
     author_email='hong-phuc.bui@htwsaar.de',
     license='MIT',
     packages=find_packages(exclude=["docs", "build", "tests"]),
+    package_data={
+        'find2deny': ['*.sql']
+    },
+    data_files=[
+        ('find2deny',['test-data/rules.cfg'])
+    ],
     install_requires=[
         'pendulum', 'ipaddress', 'ipwhois', 'importlib_resources'
     ],

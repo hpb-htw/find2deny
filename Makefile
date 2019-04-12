@@ -34,6 +34,11 @@ venv/bin/find2deny-cli: $(python_files) __version__
 	echo $(python_files)
 	pip install -e .
 
+.PHONY: test-release
+test-release: clean-all dev-release
+	pip uninstall -y find2deny
+	pip install --index-url https://test.pypi.org/simple/ --no-deps find2deny
+
 __version__:
 	echo $(version)-`date "+%s"` > __version__
 

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 from .log_parser import LogEntry
-from . import judgment
+
 
 class AbstractIpBlockExecution(ABC):
     @abstractmethod
