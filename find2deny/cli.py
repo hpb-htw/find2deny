@@ -6,7 +6,7 @@ import glob
 
 from typing import List, Dict
 
-from config_parser import ParserConfigException, VERBOSITY, LOG_FILES, LOG_PATTERN, DATABASE_PATH, JUDGMENTS_CHAIN, \
+from . config_parser import ParserConfigException, VERBOSITY, LOG_FILES, LOG_PATTERN, DATABASE_PATH, JUDGMENTS_CHAIN, \
     BOT_REQUEST, MAX_REQUEST, INTERVAL_SECONDS, UFW_PATH, CONF_FILE, LOG_LEVELS, JUDGMENTS
 from . import log_parser
 from . import judgment
@@ -23,17 +23,16 @@ from . import execution
 
 # []
 
-# Config File
-
-#effective_config = {}
 
 parser = argparse.ArgumentParser()
-parser.add_argument(f"{CONF_FILE}", type=str,
+parser.add_argument(f"{CONF_FILE}", type=str, nargs="?",
                     help="Configuration file, configuration must be given by either a configuration file "+
-                         f"(the positional argument {CONF_FILE}) or by CLI (optional arguments)")
+                         f"(the positional argument {CONF_FILE}) or by CLI (optional arguments). Typical usage "
+                         f"is writing all needed configuration in a file. CLI options are intended to be used as "
+                         f"try some configuration parameters before they are written in a configuration-file.")
 parser.add_argument("-v", f"--{VERBOSITY}", default="INFO",
                     choices=LOG_LEVELS,
-                    help="how much detail is printed out during processing log files")
+                    help="how much information is printed out during processing log files")
 parser.add_argument("-f", f"--{LOG_FILES}",
                     help="path to log file, which is use to judgment IP")
 parser.add_argument("-p", f"--{LOG_PATTERN}",
