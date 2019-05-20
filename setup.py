@@ -32,7 +32,8 @@ setup(
     classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
         'Topic :: Internet :: Log Analysis'
     ],
     keywords='logfile-analyse',
@@ -45,7 +46,7 @@ setup(
         'find2deny': ['*.sql']
     },
     data_files=[
-        ('find2deny',['test-data/rules.cfg'])
+        ('find2deny',['test-data/rules.toml'])
     ],
     install_requires=[
         'pendulum', 'ipaddress', 'ipwhois', 'importlib_resources'
