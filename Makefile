@@ -63,7 +63,7 @@ clean-all: clean
 run-example:
 	find2deny-cli test-data/rules.cfg
 
-# Auxiliary target
+# Auxiliary target run once after clone this project
 .PHONY: setup-dist-tool
 setup-dist-tool:
 	python -m pip install setuptools wheel twine

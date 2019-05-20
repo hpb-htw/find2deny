@@ -52,7 +52,10 @@ setup(
     tests_require=['pytest', 'pytest-runner', 'pytest-cov'],
     setup_requires=["pytest-runner"],
     entry_points={
-        'console_scripts': ['find2deny-cli=find2deny.cli:main'],
+        'console_scripts': [
+            'find2deny-cli=find2deny.cli:main',
+            'find2deny-init-db=find2deny.cli:init_db'
+        ],
     },
     include_package_data=True,
     zip_safe=False

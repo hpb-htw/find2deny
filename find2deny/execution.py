@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 from .log_parser import LogEntry
-
+import logging
 
 class AbstractIpBlockExecution(ABC):
     @abstractmethod
@@ -31,11 +31,14 @@ class FileBasedUWFBlock(AbstractIpBlockExecution):
         pass
 
     def block(self,log: LogEntry):
-        self.__blocked_item.append(f"ufw deny from {log.network} to any\n")
+        ufw_block_cmd = f"ufw deny from {log.network} to any"
+        logging.debug(ufw_block_cmd)
+        self.__blocked_item.append(f"{ufw_block_cmd}\n")
         pass
 
     def end_execute(self):
         with open(self.__destinate_path, 'w') as f:
             f.write("#!/bin/bash\n")
             f.writelines(self.__blocked_item)
+        logging.info("Block %d IPs", len(self.__blocked_item))
         pass

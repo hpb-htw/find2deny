@@ -20,7 +20,7 @@ def init_database(sqlite_db_path: str):
         with conn:
             conn.executescript(sql_script)
     except Exception as ex:
-        logging.warning("Cannot init database in sqlite file %s", sqlite_db_path)
+        raise JudgmentException(f"Cannot init database in sqlite file {sqlite_db_path}")
     pass
 
 
@@ -28,13 +28,15 @@ def is_ready_blocked(log_entry: LogEntry, sqlite_db_path: str):
     @functools.lru_cache(maxsize=128)
     def __cached_query(ip: int):
         conn = sqlite3.connect(sqlite_db_path)
-        with conn:
-            c = conn.cursor()
-            c.execute("SELECT COUNT(*) FROM block_network WHERE ip = ?", (ip,))
-            row = c.fetchone()
-            ip_count = row[0]
-            return ip_count == 1
-
+        try:
+            with conn:
+                c = conn.cursor()
+                c.execute("SELECT COUNT(*) FROM block_network WHERE ip = ?", (ip,))
+                row = c.fetchone()
+                ip_count = row[0]
+                return ip_count == 1
+        except sqlite3.OperationalError as ex:
+            raise JudgmentException("Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.",errors=ex)
     return __cached_query(log_entry.ip)
 
 
@@ -48,8 +50,8 @@ def update_deny(ip_network: str, log_entry: LogEntry, sqlite_db_path: str):
     try:
         with conn:
             conn.execute(insert_cmd, (log_entry.ip, ip_network, local_datetime()))
-    except Exception as ex:
-        logging.warning("Cannot update block_network")
+    except sqlite3.OperationalError as ex:
+        raise JudgmentException("Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.",errors=ex)
     # finish
     logging.info("(%s) add %s to blocked network", log_entry.ip_str, ip_network)
     pass
@@ -122,31 +124,34 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         conn.row_factory = sqlite3.Row
         ip_int = log_entry.ip
         sql_cmd = "SELECT ip, first_access, last_access, access_count FROM log_ip WHERE ip = ?"
-        c = conn.cursor()
-        c.execute(sql_cmd, (ip_int,))
-        row = c.fetchone()
-        conn.commit()
-        conn.close()
+        try:
+            c = conn.cursor()
+            c.execute(sql_cmd, (ip_int,))
+            row = c.fetchone()
+            conn.commit()
+            conn.close()
 
-        if row is None:
-            logging.debug("IP %s not found in log_ip", log_entry.ip_str)
-            self._add_log_entry(log_entry)
-            return False
-        else:
-            first_access = datetime.strptime(row['first_access'], DATETIME_FORMAT_PATTERN)
-            delay = (log_entry.time - first_access).total_seconds()
-            access_count = row['access_count'] + 1
-            logging.info("%s accessed %s %s times in %d seconds", log_entry.ip_str, log_entry.request, access_count, delay)
-            limit_rate = self.allow_access / self.interval
-            access_rate = access_count / delay if delay > 0 else limit_rate
-            if access_rate >= limit_rate:
-                self._update_deny(log_entry, access_count)
-                return True
-            else:
-                self._update_access(log_entry, access_count)
+            if row is None:
+                logging.debug("IP %s not found in log_ip", log_entry.ip_str)
+                self._add_log_entry(log_entry)
                 return False
+            else:
+                first_access = datetime.strptime(row['first_access'], DATETIME_FORMAT_PATTERN)
+                delay = (log_entry.time - first_access).total_seconds()
+                access_count = row['access_count'] + 1
+                logging.info("%s accessed %s %s times in %d seconds", log_entry.ip_str, log_entry.request, access_count, delay)
+                limit_rate = self.allow_access / self.interval
+                access_rate = access_count / delay if delay > 0 else limit_rate
+                if access_rate >= limit_rate:
+                    self._update_deny(log_entry, access_count)
+                    return True
+                else:
+                    self._update_access(log_entry, access_count)
+                    return False
+                pass
             pass
-        pass
+        except sqlite3.OperationalError as ex:
+            raise JudgmentException("Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.",errors=ex)
 
     def _add_log_entry(self, log_entry: LogEntry):
         time_iso = log_entry['time'].strftime(DATETIME_FORMAT_PATTERN)
@@ -226,4 +231,11 @@ def lookup_ip(ip: str or int) -> str:
 def __lookup_ip(normed_ip: str) -> str:
     who = IPWhois(normed_ip).lookup_rdap()
     return who["network"]["cidr"]
+
+
+class JudgmentException(Exception):
+    def __init__(self, message, errors=None):
+        self.message = message
+        self.errors = errors
+        super(JudgmentException, self).__init__(message)
 

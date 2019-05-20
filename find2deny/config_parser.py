@@ -3,21 +3,32 @@ import toml
 from typing import Dict
 
 # cli
+# Verbosity of program
 VERBOSITY = "verbosity"
+LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+CONF_FILE = "config_file"
+
+
+# Apache Log file to be analysed
 LOG_FILES = "log_files"
 LOG_PATTERN = "log_pattern"
 DATABASE_PATH = "database_path"
 
-JUDGMENTS_CHAIN = "judgments_chain"
+# Judgments configuration
+JUDGMENT = "judgment"
+RULES = "rules"
+
+# Configuration keys for path-based-judgment
 BOT_REQUEST = "bot_request"
+
+# Configuration keys for time based judgment
 MAX_REQUEST = "max_request"
-
 INTERVAL_SECONDS = "interval_seconds"
-UFW_PATH="ufw_cmd_script"
-CONF_FILE = "config_file"
 
-LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-JUDGMENTS = ["path-based-judgment", "time-based-judgment"]
+# execute
+EXECUTION = "execution"
+SCRIPT = "script"
+
 
 
 def parse_config_file(file_path:str) -> Dict:

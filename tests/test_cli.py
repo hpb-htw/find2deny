@@ -40,3 +40,7 @@ def test_construct_judgment():
     config = {"bot_request":["/phpmyadmin.php"]}
     name = "path-based-judgment"
     judgment = cli.judgment_by_name(name, config)
+    assert str(judgment).count("/phpmyadmin.php") >= 1
+
+
+
