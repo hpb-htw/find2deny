@@ -1,6 +1,7 @@
-import os, codecs, re
+import codecs
+import os
+import re
 
-from idna import package_data
 from setuptools import setup, find_packages
 
 
