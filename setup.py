@@ -36,7 +36,7 @@ setup(
         'Topic :: Internet :: Log Analysis'
     ],
     keywords='logfile-analyse',
-    url='http://mathcoach.htwsaar.de/mathcoach',
+    url='http://mathcoach.htwsaar.de/',
     author='Hong-Phuc Bui',
     author_email='hong-phuc.bui@htwsaar.de',
     license='MIT',
