@@ -1,7 +1,8 @@
+import gzip
 import ipaddress
 from datetime import datetime
 import logging
-
+import magic
 
 DATETIME_FORMAT_PATTERN = '%Y-%m-%d %H:%M:%S.%f%z'
 
@@ -203,7 +204,8 @@ def parse_log_file(log_file_path, log_pattern):
     log_pattern = log_pattern.replace('&quot;', '"').split(' ')
     logs = []
     num_of_line = 0
-    with open(log_file_path) as logfile:
+    file_reader_fn = open_log_file_fn(log_file_path)
+    with file_reader_fn(log_file_path) as logfile:
         line = logfile.readline()
         num_of_line += 1
         while line:
@@ -212,6 +214,14 @@ def parse_log_file(log_file_path, log_pattern):
             line = logfile.readline()
     logging.debug("parsed %d lines", num_of_line)
     return logs
+
+
+def open_log_file_fn(file_path):
+    file_type = magic.from_file(file_path)
+    if file_type.startswith('gzip compressed data'):
+        return lambda fp: gzip.open(fp, 'rt', encoding="utf-8")
+    else:
+        return lambda fp: open(fp)
 
 
 def parser_tomcat_log_line(log_line, pattern):

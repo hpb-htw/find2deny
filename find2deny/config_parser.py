@@ -30,7 +30,6 @@ EXECUTION = "execution"
 SCRIPT = "script"
 
 
-
 def parse_config_file(file_path:str) -> Dict:
     try:
         return toml.load(file_path)
