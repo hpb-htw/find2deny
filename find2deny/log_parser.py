@@ -219,7 +219,7 @@ def parse_log_file(log_file_path, log_pattern):
 def open_log_file_fn(file_path):
     file_type = magic.from_file(file_path)
     if file_type.startswith('gzip compressed data'):
-        return lambda fp: gzip.open(fp, 'rt', encoding="utf-8")
+        return lambda fp: gzip.open(fp, 'rt', encoding="utf-8",errors='ignore')
     else:
         return lambda fp: open(fp)
 
