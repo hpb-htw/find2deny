@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import functools
+import urllib
 from abc import ABC, abstractmethod
 from typing import List
 import pendulum
@@ -7,7 +8,7 @@ from datetime import datetime
 import sqlite3
 import logging
 
-from ipwhois import IPWhois
+from ipwhois import IPWhois, ipwhois
 from importlib_resources import read_text
 
 from .log_parser import LogEntry, DATETIME_FORMAT_PATTERN
@@ -231,11 +232,16 @@ def lookup_ip(ip: str or int) -> str:
     return __lookup_ip(str_ip)
 
 
-@functools.lru_cache(maxsize=128)
+@functools.lru_cache(maxsize=1024)
 def __lookup_ip(normed_ip: str) -> str:
-    who = IPWhois(normed_ip).lookup_rdap()
-    return who["network"]["cidr"]
-
+    try:
+        who = IPWhois(normed_ip).lookup_rdap()
+        return who["network"]["cidr"]
+    except urllib.error.HTTPError or ipwhois.exceptions.HTTPLookupError as ex:
+        logging.warn("IP Lookup for %s fail", normed_ip)
+        logging.warn("return ip instead of network")
+        logging.debug(ex)
+        return normed_ip
 
 class JudgmentException(Exception):
     def __init__(self, message, errors=None):
