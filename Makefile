@@ -1,7 +1,7 @@
 # Makefile defines some common tasks which often used during development
 #
 
-version = 0.1.9
+version = 0.1.10
 compile = python3 setup.py sdist bdist_wheel
 python_files = $(shell find find2deny -name "*.py")
 
@@ -38,7 +38,7 @@ venv/bin/find2deny-cli: $(python_files) __version__
 test-release: clean-all dev-release
 	pip uninstall -y find2deny
 	pip install --index-url https://test.pypi.org/simple/ --no-deps find2deny
-	git commit -a -m "test-release OK at `date`"
+	git commit -a -m `date`
 
 __version__: Makefile
 	echo $(version)-`date "+%s"` > __version__

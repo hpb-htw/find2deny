@@ -237,7 +237,7 @@ def __lookup_ip(normed_ip: str) -> str:
     try:
         who = IPWhois(normed_ip).lookup_rdap()
         return who["network"]["cidr"]
-    except urllib.error.HTTPError or ipwhois.exceptions.HTTPLookupError as ex:
+    except (urllib.error.HTTPError, ipwhois.exceptions.HTTPLookupError) as ex:
         logging.warn("IP Lookup for %s fail", normed_ip)
         logging.warn("return ip instead of network")
         logging.debug(ex)
