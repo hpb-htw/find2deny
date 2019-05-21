@@ -95,8 +95,12 @@ class PathBasedIpJudgment(AbstractIpJudgment):
         pass
 
     def should_deny(self, log_entry: LogEntry) -> bool:
-        request_path = log_entry.request.split(" ")[1]
-        return any(elem.startswith(request_path) for elem in self._bot_path)
+        try:
+            request_path = log_entry.request.split(" ")[1]
+            return any(elem.startswith(request_path) for elem in self._bot_path)
+        except IndexError as ex:
+            logging.info("Ignore request %s", log_entry.request)
+            return False
 
     def __str__(self):
         return "PathBasedIpJudgment/bot_path:{}".format(self._bot_path)
