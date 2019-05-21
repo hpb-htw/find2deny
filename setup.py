@@ -49,7 +49,7 @@ setup(
         ('find2deny',['test-data/rules.toml'])
     ],
     install_requires=[
-        'pendulum', 'ipaddress', 'ipwhois', 'importlib_resources', 'python-magic'
+        'pendulum', 'ipaddress', 'ipwhois', 'importlib_resources', 'python-magic', 'toml'
     ],
     tests_require=['pytest', 'pytest-runner', 'pytest-cov'],
     setup_requires=["pytest-runner"],
