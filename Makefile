@@ -38,7 +38,7 @@ venv/bin/find2deny-cli: $(python_files) __version__
 test-release: clean-all dev-release
 	pip uninstall -y find2deny
 	pip install --index-url https://test.pypi.org/simple/ --no-deps find2deny
-	git commit -a -m "release OK at `date`"
+	git commit -a -m 'release OK at `date`'
 
 __version__: Makefile
 	echo $(version)-`date "+%s"` > __version__
