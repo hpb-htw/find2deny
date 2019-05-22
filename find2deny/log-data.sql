@@ -16,3 +16,10 @@ CREATE TABLE IF NOT EXISTS log_ip (
 status: 0 => allow
         1 => block
 */
+
+CREATE TABLE IF NOT EXISTS processed_log_ip (
+    ip INTEGER,
+    line INTEGER,
+    log_file TEXT,
+    PRIMARY KEY (ip,line, log_file)
+);

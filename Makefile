@@ -56,9 +56,13 @@ clean: clean-pyc
 	rm -rf .eggs .pytest_cache find2deny.egg-info dist build __version__
 	rm -f venv/bin/find2deny-cli
 
-.PHONY: clean-all
-clean-all: clean
+.PHONY: clean-db
+clean-db:
 	rm -f $(sqlite-db) $(ufw-shell-file)
+
+.PHONY: clean-all
+clean-all: clean clean-db
+
 
 .PHONY: run-example
 run-example:

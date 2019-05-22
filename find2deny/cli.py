@@ -70,6 +70,7 @@ def validate_config(config: Dict):
         raise ParserConfigException("Log files are not configured")
 
 
+#TODO: test this method
 def analyse_log_files(config: Dict):
     log_files = expand_log_files(config[LOG_FILES])
     judge = construct_judgment(config)

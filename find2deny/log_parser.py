@@ -2,6 +2,8 @@ import gzip
 import ipaddress
 from datetime import datetime
 import logging
+from typing import List
+
 import magic
 
 DATETIME_FORMAT_PATTERN = '%Y-%m-%d %H:%M:%S.%f%z'
@@ -24,7 +26,9 @@ class LogEntry:
                  status: int = 0,
                  request: str = None,
                  byte: int = 0,
-                 user: str = None):
+                 user: str = None,
+                 log_file: str = None,
+                 line: int = 1):
         self.__ip = ip
         self.__network = network
         self.__time = time
@@ -32,6 +36,8 @@ class LogEntry:
         self.__request = request
         self.__byte = byte
         self.__user = user
+        self.__log_file = log_file
+        self.__line = line
 
     @property
     def ip(self) -> int:
@@ -129,20 +135,25 @@ class LogEntry:
 
     @property
     def ip_str(self):
-        return LogEntry.int_to_ip(self.__ip)
+        return int_to_ip(self.__ip)
 
-    @staticmethod
-    def ip_to_int(ip_str):
-        """
-        (2^(8*3))*a + (2^(8*2))*b + (2^8)*c + d
-        :param ip_str:
-        :return:
-        """
-        return int(ipaddress.IPv4Address(ip_str))
+    @property
+    def log_file(self) -> str:
+        return self.__log_file
 
-    @staticmethod
-    def int_to_ip(ip_int):
-        return str(ipaddress.IPv4Address(ip_int))
+    @log_file.setter
+    def log_file(self, log_file: str):
+        self.__log_file = log_file
+
+    @property
+    def line(self) -> int:
+        return self.__line
+
+    @line.setter
+    def line(self, line:int):
+        self.__line = line
+
+
 
     def __getitem__(self, item):
         if item == "ip":
@@ -157,6 +168,10 @@ class LogEntry:
             return self.__user
         elif item == "byte":
             return self.__byte
+        elif item == "log_file":
+            return self.__log_file
+        elif item == "line":
+            return self.__line
         else:
             raise KeyError("{} does not have property {}".format(self.__class__.__name__, item))
 
@@ -173,12 +188,18 @@ class LogEntry:
             self.user = value
         elif key == "byte":
             self.byte = value
+        elif key == "log_file":
+            self.log_file = value
+        elif key == "line":
+            self.line = value
         else:
             raise KeyError("{} does not have property {}".format(self.__class__.__name__, key))
 
     def __str__(self):
-        return "{} {} {} {} {} {}".format(
-            LogEntry.int_to_ip(self.ip),
+        return "{}:{}: {} {} {} {} {} {}".format(
+            self.log_file,
+            self.line,
+            int_to_ip(self.ip),
             self.iso_time,
             self.user,
             self.request,
@@ -187,7 +208,7 @@ class LogEntry:
         )
 
 
-def parse_log_file(log_file_path, log_pattern):
+def parse_log_file(log_file_path, log_pattern) -> List[LogEntry]:
     """
     gibt eine Liste von IP in `tomcat_access_path'-Datei zurück, welche als Angriff
     eingestuft wird.
@@ -209,7 +230,7 @@ def parse_log_file(log_file_path, log_pattern):
         line = logfile.readline()
         num_of_line += 1
         while line:
-            log_entry = parser_tomcat_log_line(line, log_pattern)
+            log_entry = parser_tomcat_log_line(log_file_path, num_of_line, line, log_pattern)
             logs.append(log_entry)
             line = logfile.readline()
     logging.debug("parsed %d lines", num_of_line)
@@ -224,11 +245,38 @@ def open_log_file_fn(file_path):
         return lambda fp: open(fp)
 
 
-def parser_tomcat_log_line(log_line, pattern):
-    entry = LogEntry()
+def parser_tomcat_log_line(log_file_path: str, num_of_line: int, log_line: str, pattern: str) -> LogEntry:
+    entry = LogEntry(log_file=log_file_path, line=num_of_line)
     line_idx = 0
     host = None
     proxy_host = None
+
+    def _parser_word(log_line, start_idx):
+        word = ''
+        i = start_idx
+        for i in range(start_idx, len(log_line)):
+            c = log_line[i]
+            if c != ' ':
+                word += c
+            else:
+                i += 1
+                break
+
+        return (word, i)
+
+    def _parser_sentence(log_line, start_idx, begin_quote='"', end_quote='"'):
+        sentence = ''
+        if log_line[start_idx] != begin_quote:
+            raise TypeError("Expected string")
+        i = start_idx
+        for i in range(start_idx + 1, len(log_line)):
+            c = log_line[i]
+            if c == end_quote:
+                i += 2  # '"' and ' '
+                break
+            else:
+                sentence += c
+        return (sentence, i)
 
     for idx, value in enumerate(pattern):
         if value == '%h':
@@ -264,38 +312,23 @@ def parser_tomcat_log_line(log_line, pattern):
     logging.debug("host=%s proxy=%s", host, proxy_host)
     if proxy_host is not None:
         logging.debug("use proxy_host %s", proxy_host)
-        entry.ip = LogEntry.ip_to_int(proxy_host)
+        entry.ip = ip_to_int(proxy_host)
     else:
         logging.debug("use host %s", host)
-        entry.ip = LogEntry.ip_to_int(host)
+        entry.ip = ip_to_int(host)
 
     return entry
 
 
-def _parser_word(log_line, start_idx):
-    word = ''
-    i = start_idx
-    for i in range(start_idx, len(log_line)):
-        c = log_line[i]
-        if c != ' ':
-            word += c
-        else:
-            i += 1
-            break
-
-    return (word, i)
+def ip_to_int(ip: str) -> int:
+    """
+    (2^(8*3))*a + (2^(8*2))*b + (2^8)*c + d
+    :param ip_str:
+    :return:
+    """
+    return int(ipaddress.IPv4Address(ip))
 
 
-def _parser_sentence(log_line, start_idx, begin_quote='"', end_quote='"'):
-    sentence = ''
-    if log_line[start_idx] != begin_quote:
-        raise TypeError("Expected string")
-    i = start_idx
-    for i in range(start_idx + 1, len(log_line)):
-        c = log_line[i]
-        if c == end_quote:
-            i += 2  # '"' and ' '
-            break
-        else:
-            sentence += c
-    return (sentence, i)
+def int_to_ip(ip: int) -> str:
+    return str(ipaddress.IPv4Address(ip))
+
