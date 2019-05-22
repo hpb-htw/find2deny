@@ -20,15 +20,16 @@ class LogEntry:
         * 'user': remote-user or None if not available
     """
 
-    def __init__(self, ip: int = 0,
+    def __init__(self, log_file: str,
+                 line: int,
+                 ip: int = 0,
                  network: str = None,
                  time: datetime = None,
                  status: int = 0,
                  request: str = None,
                  byte: int = 0,
-                 user: str = None,
-                 log_file: str = None,
-                 line: int = 1):
+                 user: str = None
+                 ):
         self.__ip = ip
         self.__network = network
         self.__time = time
@@ -153,8 +154,6 @@ class LogEntry:
     def line(self, line:int):
         self.__line = line
 
-
-
     def __getitem__(self, item):
         if item == "ip":
             return self.__ip
@@ -246,7 +245,7 @@ def open_log_file_fn(file_path):
 
 
 def parser_tomcat_log_line(log_file_path: str, num_of_line: int, log_line: str, pattern: str) -> LogEntry:
-    entry = LogEntry(log_file=log_file_path, line=num_of_line)
+    entry = LogEntry(log_file_path, num_of_line)
     line_idx = 0
     host = None
     proxy_host = None

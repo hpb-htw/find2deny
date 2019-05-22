@@ -1,4 +1,5 @@
-#!/usr/bin/python3
+# -*- encoding:utf8 -*-
+
 import functools
 import urllib
 from abc import ABC, abstractmethod
@@ -13,6 +14,7 @@ from importlib_resources import read_text
 
 from . log_parser import LogEntry, DATETIME_FORMAT_PATTERN
 from . import log_parser
+
 
 def init_database(sqlite_db_path: str):
     sql_script = read_text("find2deny", "log-data.sql")
@@ -148,12 +150,13 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
                 c.execute(sql_cmd, (log_entry.ip, log_entry.line, log_entry.log_file))
                 row = c.fetchone()
                 conn.commit()
-                logging.debug("read value from database: %s", row)
+
                 if not row or row is None:
                     return False
                 else:
+                    logging.debug("found %d processed ip in database log for entry %s ", row[0], log_entry)
                     ip_count = row[0]
-                return ip_count > 0
+                    return ip_count == 1
         except sqlite3.Error as ex:
             logging.warning("Cannot make connection to database file %s", self._sqlite_db_path)
             return False
@@ -162,12 +165,14 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         ip_int = log_entry.ip
         conn = sqlite3.connect(self._sqlite_db_path)
         conn.row_factory = sqlite3.Row
-        sql_cmd = "SELECT ip, first_access, last_access, access_count FROM log_ip WHERE ip = ?"
         try:
             c = conn.cursor()
-            c.execute(sql_cmd, (ip_int,))
-            row = c.fetchone()
+            c.execute("INSERT INTO processed_log_ip (ip, line, log_file) VALUES (?, ?, ?)",
+                      (log_entry.ip, log_entry.line, log_entry.log_file))
+            c.execute("SELECT ip, first_access, last_access, access_count FROM log_ip WHERE ip = ?",
+                      (ip_int,))
             conn.commit()
+            row = c.fetchone()
             conn.close()
 
             if row is None:
@@ -203,14 +208,23 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
                     else:
                         self._update_access(log_entry, access_count)
                         return False
-            pass
         except sqlite3.OperationalError as ex:
             raise JudgmentException(
                 "Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.", errors=ex)
 
     #TODO: Implementierung
     def _lookup_decision_cache(self, log_entry:LogEntry) -> bool:
-        return True
+        try:
+            with sqlite3.connect(self._sqlite_db_path) as conn:
+                c = conn.cursor()
+                c.execute("SELECT count(*) FROM block_network WHERE ip = ?",(log_entry.ip,))
+                conn.commit()
+                row = c.fetchone()
+                count = row[0]
+                return count == 1
+        except sqlite3.OperationalError as ex:
+            raise JudgmentException(
+                "Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.", errors=ex)
 
     def _add_log_entry(self, log_entry: LogEntry):
         time_iso = log_entry['time'].strftime(DATETIME_FORMAT_PATTERN)

@@ -15,6 +15,8 @@ def clean_output_file():
 
 def test_FileBasedUFWBlock(clean_output_file):
     log = [log_parser.LogEntry(
+        "some-file",
+        1234,
         ip=log_parser.ip_to_int("1.2.3.4"),
         network="1.2.3.4/"+str(x),
         time=None,
