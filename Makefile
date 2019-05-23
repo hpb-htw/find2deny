@@ -1,7 +1,7 @@
 # Makefile defines some common tasks which often used during development
 #
 
-version = 0.1.10
+version = 0.1.11
 compile = python3 setup.py sdist bdist_wheel
 python_files = $(shell find find2deny -name "*.py")
 
