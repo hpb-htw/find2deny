@@ -1,9 +1,12 @@
 # Makefile defines some common tasks which often used during development
 #
 
-version = 0.1.11
+project_name = find2deny
+version = 0.1.12
 compile = python3 setup.py sdist bdist_wheel
 python_files = $(shell find find2deny -name "*.py")
+__version__ = $(project_name)/__version__.py
+
 
 sqlite-db=dummy-db.sqlite
 ufw-shell-file=block-ip.sh
@@ -14,8 +17,7 @@ dev-release: dev-compile
 	python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
 
 .PHONY: dev-compile
-dev-compile: $(python_files)
-	echo $(version)-`date "+%s"` > __version__
+dev-compile: $(python_files) $(__version__)
 	$(compile)
 
 .PHONY:release
@@ -24,24 +26,24 @@ release: compile
 
 .PHONY: compile
 compile: $(python_files)
-	echo $(version) > __version__
+	echo $(version) > $(__version__)
 	$(compile)
 
 .PHONY: local-install
 local-install: venv/bin/find2deny-cli
 
-venv/bin/find2deny-cli: $(python_files) __version__
+venv/bin/find2deny-cli: $(python_files) $(__version__)
 	echo $(python_files)
 	pip install -e .
 
 .PHONY: test-release
 test-release: clean-all dev-release
 	pip uninstall -y find2deny
-	pip install --index-url https://test.pypi.org/simple/ --no-deps find2deny
+	pip install --index-url https://test.pypi.org/simple/ --no-deps $(project_name)
 	git commit -a -m 'release OK at `date`'
 
-__version__: Makefile
-	echo $(version)-`date "+%s"` > __version__
+$(__version__): Makefile
+	echo __version__ = \'$(version)-`date "+%s"`\' > $@
 
 .PHONY: unittest
 unittest:
@@ -53,7 +55,7 @@ clean-pyc:
 
 .PHONY: clean
 clean: clean-pyc
-	rm -rf .eggs .pytest_cache find2deny.egg-info dist build __version__
+	rm -rf .eggs .pytest_cache find2deny.egg-info dist build
 	rm -f venv/bin/find2deny-cli
 
 .PHONY: clean-db

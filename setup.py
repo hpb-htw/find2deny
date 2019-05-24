@@ -9,15 +9,18 @@ def readme():
     with open('README.rst') as f:
         return f.read()
 
+
 here = os.path.abspath(os.path.dirname(__file__))
+
 
 def read(*parts):
     with codecs.open(os.path.join(here, *parts), 'r') as fp:
         return fp.read()
 
+
 def find_version(*file_paths):
     version_file = read(*file_paths)
-    version_match = re.search(r"^([^'\"]*)",
+    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]",
                               version_file, re.M)
     if version_match:
         return version_match.group(1)
@@ -26,7 +29,7 @@ def find_version(*file_paths):
 
 setup(
     name='find2deny',
-    version=find_version("__version__"),
+    version=find_version("find2deny/__version__.py"),
     description='find Bot IPs in log file to firewall them',
     long_description=readme(),
     classifiers=[
