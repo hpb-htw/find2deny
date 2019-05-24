@@ -2,6 +2,7 @@
 
 import functools
 import urllib
+import urllib.error
 from abc import ABC, abstractmethod
 from typing import List
 import pendulum
@@ -22,8 +23,8 @@ def init_database(sqlite_db_path: str):
     try:
         with conn:
             conn.executescript(sql_script)
-    except Exception as ex:
-        raise JudgmentException(f"Cannot init database in sqlite file {sqlite_db_path}")
+    except sqlite3.OperationalError as ex:
+        raise JudgmentException(f"Cannot init database in sqlite file {sqlite_db_path}", error=ex)
     pass
 
 
@@ -39,7 +40,7 @@ def is_ready_blocked(log_entry: LogEntry, sqlite_db_path: str):
                 ip_count = row[0]
                 return ip_count == 1
         except sqlite3.OperationalError as ex:
-            raise JudgmentException("Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.",errors=ex)
+            raise JudgmentException("Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.", errors=ex)
     return __cached_query(log_entry.ip)
 
 
@@ -100,17 +101,18 @@ class PathBasedIpJudgment(AbstractIpJudgment):
     def should_deny(self, log_entry: LogEntry) -> bool:
         try:
             request_path = log_entry.request.split(" ")[1]
-            request_resource = next( (r for r in self._bot_path if request_path.startswith(r)), None)
-            blocked = request_resource is not None#any(elem.startswith(request_path) for elem in self._bot_path)
+            request_resource = next((r for r in self._bot_path if request_path.startswith(r)), None)
+            blocked = request_resource is not None
             if blocked:
                 logging.info("Block %s because it tried to access %s which matches resource %s (expected as non exist)",
                              log_entry.ip_str, request_path, request_resource)
             return blocked
-        except IndexError as ex:
+        except IndexError:
             if log_entry.request == "-":
                 return False
             else:
-                logging.info("Block %s because its request >>%s<< is not conform to HTTP", log_entry.ip_str, log_entry.request)
+                logging.info("Block %s because its request >>%s<< is not conform to HTTP",
+                             log_entry.ip_str, log_entry.request)
                 return True
 
     def __str__(self):
@@ -157,7 +159,7 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
                     logging.debug("found %d processed ip in database log for entry %s ", row[0], log_entry)
                     ip_count = row[0]
                     return ip_count == 1
-        except sqlite3.Error as ex:
+        except sqlite3.OperationalError:
             logging.warning("Cannot make connection to database file %s", self._sqlite_db_path)
             return False
 
@@ -212,12 +214,12 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
             raise JudgmentException(
                 "Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.", errors=ex)
 
-    #TODO: Implementierung
+    # TODO: Implementierung
     def _lookup_decision_cache(self, log_entry:LogEntry) -> bool:
         try:
             with sqlite3.connect(self._sqlite_db_path) as conn:
                 c = conn.cursor()
-                c.execute("SELECT count(*) FROM block_network WHERE ip = ?",(log_entry.ip,))
+                c.execute("SELECT count(*) FROM block_network WHERE ip = ?", (log_entry.ip,))
                 conn.commit()
                 row = c.fetchone()
                 count = row[0]
@@ -238,9 +240,9 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
                                        time_iso,
                                        1)
                              )
-        except Exception as ex:
+        except sqlite3.OperationalError:
             logging.warning("Cannot insert new log to log_ip")
-        logging.info("added %s to log_ip",log_entry.ip_str)
+        logging.info("added %s to log_ip", log_entry.ip_str)
         pass
 
     def _update_deny(self, log_entry: LogEntry, access_count: int):
@@ -258,12 +260,11 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
             status = 1
             WHERE ip = ?
         """
-        conn = sqlite3.connect(self._sqlite_db_path)
         # Begin Transaction
         try:
-            with conn:
+            with sqlite3.connect(self._sqlite_db_path) as conn:
                 conn.execute(update_cmd, (ip_network, log_entry.iso_time, access_count, log_entry.ip))
-        except Exception as ex:
+        except sqlite3.OperationalError:
             logging.warning("Cannot update block_network")
         # finish
         pass
@@ -281,7 +282,7 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
             with conn:
                 # Begin Transaction
                 conn.execute(update_cmd, (local_datetime(), access_count, log_entry.ip))
-        except Exception as ex:
+        except sqlite3.OperationalError:
             print("Cannot update log_ip")
         # finish
         logging.info("update access_count of %s to %s", log_entry.ip_str, access_count)
@@ -306,8 +307,8 @@ def __lookup_ip(normed_ip: str) -> str:
         who = IPWhois(normed_ip).lookup_rdap()
         return who["network"]["cidr"]
     except (urllib.error.HTTPError, exceptions.HTTPLookupError) as ex:
-        logging.warn("IP Lookup for %s fail", normed_ip)
-        logging.warn("return ip instead of network")
+        logging.warning("IP Lookup for %s fail", normed_ip)
+        logging.warning("return ip instead of network")
         logging.debug(ex)
         return normed_ip
 
@@ -317,4 +318,3 @@ class JudgmentException(Exception):
         self.message = message
         self.errors = errors
         super(JudgmentException, self).__init__(message)
-

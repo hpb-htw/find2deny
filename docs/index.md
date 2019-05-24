@@ -1,22 +1,13 @@
 # Usage
 
 
-`find2deny-cli <config-file.cfg>`
+`find2deny-cli <config-file.toml>`
 
 `config-file` a file which https://docs.python.org/3/library/configparser.html
 can parse. Example
 
-```ini
-[DEFAULT]
-log_files=<list of log file, separated by space>
-log_pattern=<log-pattern>
-
-[judgment]
-judgments_chain=<name of judgments>
-bot-request=<request paths that like from a bot, separated by space>
-max-request=10
-interval-seconds=10
-time-database-path=<path to a sqlite database>
+```toml
+TODO !
 ``` 
 
 
