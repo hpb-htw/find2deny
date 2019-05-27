@@ -309,20 +309,23 @@ def parser_tomcat_log_line(log_file_path: str, num_of_line: int, log_line: str, 
 
     # update ip at the last attribute
     logging.debug("host=%s proxy=%s", host, proxy_host)
-    if proxy_host is not None:
-        logging.debug("use proxy_host %s", proxy_host)
-        entry.ip = ip_to_int(proxy_host)
-    else:
-        logging.debug("use host %s", host)
-        entry.ip = ip_to_int(host)
+    try:
+        if proxy_host is not None:
+            logging.debug("use proxy_host %s", proxy_host)
+            entry.ip = ip_to_int(proxy_host)
+        else:
+            logging.debug("use host %s", host)
+            entry.ip = ip_to_int(host)
 
-    return entry
+        return entry
+    except ipaddress.AddressValueError as ex:
+        raise LogParserException(log_file_path, num_of_line, str(ex), errors=ex)
 
 
 def ip_to_int(ip: str) -> int:
     """
     (2^(8*3))*a + (2^(8*2))*b + (2^8)*c + d
-    :param ip_str:
+    :param ip:
     :return:
     """
     return int(ipaddress.IPv4Address(ip))
@@ -331,3 +334,9 @@ def ip_to_int(ip: str) -> int:
 def int_to_ip(ip: int) -> str:
     return str(ipaddress.IPv4Address(ip))
 
+
+class LogParserException(Exception):
+    def __init__(self,log_file, line, message, errors=None):
+        self.message = "({},{}) {}".format(log_file, line, message)
+        self.errors = errors
+        super(LogParserException, self).__init__(message)

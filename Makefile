@@ -2,7 +2,7 @@
 #
 
 project_name = find2deny
-version = 0.1.12
+version = 0.1.13
 compile = python3 setup.py sdist bdist_wheel
 python_files = $(shell find find2deny -name "*.py")
 __version__ = $(project_name)/__version__.py
@@ -26,7 +26,7 @@ release: compile
 
 .PHONY: compile
 compile: $(python_files)
-	echo $(version) > $(__version__)
+	echo __version__ = \'$(version)\' > $(__version__)
 	$(compile)
 
 .PHONY: local-install
