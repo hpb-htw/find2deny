@@ -227,8 +227,8 @@ def parse_log_file(log_file_path, log_pattern) -> List[LogEntry]:
     file_reader_fn = open_log_file_fn(log_file_path)
     with file_reader_fn(log_file_path) as logfile:
         line = logfile.readline()
-        num_of_line += 1
         while line:
+            num_of_line += 1
             log_entry = parser_tomcat_log_line(log_file_path, num_of_line, line, log_pattern)
             logs.append(log_entry)
             line = logfile.readline()
