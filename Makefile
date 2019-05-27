@@ -2,7 +2,7 @@
 #
 
 project_name = find2deny
-version = 0.1.13
+version = 0.1.14
 compile = python3 setup.py sdist bdist_wheel
 python_files = $(shell find find2deny -name "*.py")
 __version__ = $(project_name)/__version__.py
