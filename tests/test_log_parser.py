@@ -48,3 +48,12 @@ def test_read_gz_file():
     assert text_line is not None
     assert text_line.strip() == '159.224.5.133 - - [30/Mar/2019:06:45:42 +0000] "GET / HTTP/1.0" 200 1219 "-" "-"'
 
+
+def test_ignore_bad_source_ip():
+    line = 'ec2-13-233-107-164.ap-south-1.compute.amazonaws.com - - [15/May/2019:22:27:08 +0000] "GET /manager/html HTTP/1.1" 403 8036 "-" "Python-urllib/2.7"'
+    pattern = '%h %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i"'.split(' ')
+    try:
+        log_parser.parser_tomcat_log_line("no-name.log", 1024, line, pattern)
+        assert False
+    except log_parser.CannotParseLogIpException as ex:
+        assert True
