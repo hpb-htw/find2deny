@@ -339,4 +339,4 @@ class LogParserException(Exception):
     def __init__(self,log_file, line, message, errors=None):
         self.message = "({},{}) {}".format(log_file, line, message)
         self.errors = errors
-        super(LogParserException, self).__init__(message)
+        super(LogParserException, self).__init__(self.message)
