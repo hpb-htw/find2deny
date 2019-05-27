@@ -229,8 +229,11 @@ def parse_log_file(log_file_path, log_pattern) -> List[LogEntry]:
         line = logfile.readline()
         while line:
             num_of_line += 1
-            log_entry = parser_tomcat_log_line(log_file_path, num_of_line, line, log_pattern)
-            logs.append(log_entry)
+            try:
+                log_entry = parser_tomcat_log_line(log_file_path, num_of_line, line, log_pattern)
+                logs.append(log_entry)
+            except CannotParseLogIpException as ex:
+                logging.warning(ex)
             line = logfile.readline()
     logging.debug("parsed %d lines", num_of_line)
     return logs
@@ -260,7 +263,6 @@ def parser_tomcat_log_line(log_file_path: str, num_of_line: int, log_line: str, 
             else:
                 i += 1
                 break
-
         return (word, i)
 
     def _parser_sentence(log_line, start_idx, begin_quote='"', end_quote='"'):
@@ -319,7 +321,7 @@ def parser_tomcat_log_line(log_file_path: str, num_of_line: int, log_line: str, 
 
         return entry
     except ipaddress.AddressValueError as ex:
-        raise LogParserException(log_file_path, num_of_line, str(ex), errors=ex)
+        raise CannotParseLogIpException(log_file_path, num_of_line, str(ex), errors=ex)
 
 
 def ip_to_int(ip: str) -> int:
@@ -335,8 +337,8 @@ def int_to_ip(ip: int) -> str:
     return str(ipaddress.IPv4Address(ip))
 
 
-class LogParserException(Exception):
+class CannotParseLogIpException(Exception):
     def __init__(self,log_file, line, message, errors=None):
         self.message = "({},{}) {}".format(log_file, line, message)
         self.errors = errors
-        super(LogParserException, self).__init__(self.message)
+        super(CannotParseLogIpException, self).__init__(self.message)
