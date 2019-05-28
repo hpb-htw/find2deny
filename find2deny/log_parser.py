@@ -235,7 +235,7 @@ def parse_log_file(log_file_path, log_pattern) -> List[LogEntry]:
             except CannotParseLogIpException as ex:
                 logging.warning(ex)
             line = logfile.readline()
-    logging.debug("parsed %d lines", num_of_line)
+    logging.info("parsed %d lines", num_of_line)
     return logs
 
 

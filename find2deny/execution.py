@@ -31,9 +31,10 @@ class FileBasedUWFBlock(AbstractIpBlockExecution):
         self.__blocked_item = []
         pass
 
-    def block(self,log: LogEntry):
+    def block(self,log: LogEntry, cause: str = None):
+        cause = cause.replace('\n', ' ') if cause is not None else ' ';
         for n in re.split(",\\s*",log.network):
-            ufw_block_cmd = f"ufw deny from {n.strip()} to any"
+            ufw_block_cmd = f"ufw deny from {n.strip()} to any # {cause}"
             logging.debug("use command %s", ufw_block_cmd)
             self.__blocked_item.append(f"{ufw_block_cmd}\n")
         pass

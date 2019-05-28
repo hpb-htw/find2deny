@@ -42,24 +42,28 @@ def main():
                         f"(the positional argument {CONF_FILE}). The Debug level can be changed by "
                         f"optional argument --{VERBOSITY}.")
 
-    parser.add_argument("-v", f"--{VERBOSITY}", default="INFO",
+    parser.add_argument("-v", f"--{VERBOSITY}",
                         choices=LOG_LEVELS,
                         help="how much information is printed out during processing log files")
     _parser = parser
     cli_arg = vars( parser.parse_args(argv[1:]) )
     verbosity = cli_arg[VERBOSITY]
-    apply_log_config(verbosity)
+    if verbosity is not None:
+        apply_log_config(verbosity)
     file_based_config = parse_config_file(cli_arg[CONF_FILE])
-    if VERBOSITY in cli_arg: file_based_config[VERBOSITY] = verbosity
+    if verbosity is not None:
+        file_based_config[VERBOSITY] = verbosity
     if logging.getLogger("root").isEnabledFor(logging.DEBUG): logging.debug(pformat(file_based_config))
     validate_config(file_based_config)
     try:
+        apply_log_config(file_based_config[VERBOSITY])
         analyse_log_files(file_based_config)
     except judgment.JudgmentException as ex:
         print(ex, file=sys.stderr)
 
 
 def apply_log_config(verbosity: str):
+    print(verbosity)
     log_level = logging.getLevelName(verbosity)
     logging.getLogger().setLevel(level=log_level)
     logging.info("Verbosity: %s %d", verbosity, log_level)
@@ -82,15 +86,19 @@ def analyse_log_files(config: Dict):
         logs = log_parser.parse_log_file(file_path, log_pattern)
         for log in logs:
             logging.debug("Process `%s'", log)
-            if judgment.is_ready_blocked(log, config[DATABASE_PATH]):
+            blocked, cause = judgment.is_ready_blocked(log, config[DATABASE_PATH])
+            if blocked:
                 logging.info("IP %s is ready blocked", log.ip_str)
-            elif judge.should_deny(log):
-                network = judgment.lookup_ip(log.ip_str)
-                log.network = network
-                executor.block(log)
+            else:
+                deny, cause = judge.should_deny(log)
+                if deny:
+                    network = judgment.lookup_ip(log.ip_str)
+                    log.network = network
+                    executor.block(log, cause)
     executor.end_execute()
 
 
+# TODO: sort result chronological
 def expand_log_files(config_log_file: List[str]) -> List:
     log_files = []
     for p in config_log_file:
@@ -101,6 +109,17 @@ def expand_log_files(config_log_file: List[str]) -> List:
         log_files = log_files + expand_path
     return log_files
 
+
+def chronological_compare(file_name_1, file_name_2):
+    '''
+    :return -1 if file_name_1 was created before the file_name_2, 0 if both files ware created at the same
+    time, and 1 if file_name_1 was created after the file_name_2
+    :param file_name_1:
+    :param file_name_2:
+    :return:
+    '''
+    # TODO
+    pass
 
 def construct_judgment(config) -> judgment.AbstractIpJudgment:
     judgments_chain = config[JUDGMENT] if JUDGMENT in config else []

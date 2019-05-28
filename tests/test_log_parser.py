@@ -39,7 +39,7 @@ def test_ip_to_int():
 
 
 def test_read_gz_file():
-    file_path = "test-data/apache2/access.log.2.gz"
+    file_path = "test-data/apache2-markov/access.log.2.gz"
     file_reader = log_parser.open_log_file_fn(file_path)
     #text_line = None
     with file_reader(file_path) as f:
