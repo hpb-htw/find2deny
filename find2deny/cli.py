@@ -1,4 +1,5 @@
-import sys, os
+import sys
+from  os import path
 import argparse
 import logging
 import configparser
@@ -98,8 +99,12 @@ def analyse_log_files(config: Dict):
     executor.end_execute()
 
 
-# TODO: sort result chronological
-def expand_log_files(config_log_file: List[str]) -> List:
+def apache_access_log_file_chronological_decode(file_name):
+    base_name = path.basename(file_name).split('.')
+    return -int(base_name[2]) if len(base_name) > 2 else 0;
+
+
+def expand_log_files(config_log_file: List[str], key=apache_access_log_file_chronological_decode) -> List:
     log_files = []
     for p in config_log_file:
         expand_path = glob.glob(p)
@@ -107,19 +112,10 @@ def expand_log_files(config_log_file: List[str]) -> List:
         if len(expand_path) == 0:
             logging.warn("Glob path '%s' cannot be expanded to any real path", p)
         log_files = log_files + expand_path
+    log_files.sort(key=key)
+    logging.info("Analyse %d file(s)", len(log_files))
     return log_files
 
-
-def chronological_compare(file_name_1, file_name_2):
-    '''
-    :return -1 if file_name_1 was created before the file_name_2, 0 if both files ware created at the same
-    time, and 1 if file_name_1 was created after the file_name_2
-    :param file_name_1:
-    :param file_name_2:
-    :return:
-    '''
-    # TODO
-    pass
 
 def construct_judgment(config) -> judgment.AbstractIpJudgment:
     judgments_chain = config[JUDGMENT] if JUDGMENT in config else []

@@ -171,56 +171,57 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
 
     def _make_block_ip_decision(self, log_entry: LogEntry) -> (bool, str):
         ip_int = log_entry.ip
-        conn = sqlite3.connect(self._sqlite_db_path)
-        conn.row_factory = sqlite3.Row
+        # row = None
         try:
-            c = conn.cursor()
-            c.execute("INSERT INTO processed_log_ip (ip, line, log_file) VALUES (?, ?, ?)",
-                      (log_entry.ip, log_entry.line, log_entry.log_file))
-            c.execute("SELECT ip, first_access, last_access, access_count FROM log_ip WHERE ip = ?",
-                      (ip_int,))
-            conn.commit()
-            row = c.fetchone()
-            conn.close()
-
-            if row is None:
-                logging.debug("IP %s not found in log_ip", log_entry.ip_str)
-                self._add_log_entry(log_entry)
-                return False, None
-            else:
-                first_access = datetime.strptime(row['first_access'], DATETIME_FORMAT_PATTERN)
-                logging.debug("log time: %s  first access: %s", log_entry.time, first_access)
-                delay = (log_entry.time - first_access).total_seconds()
-                delay = abs(delay)
-                access_count = row['access_count'] + 1
-                logging.debug("%s accessed %s %s times in %d seconds", log_entry.ip_str, log_entry.request, access_count,
-                             delay)
-                limit_rate = self.allow_access / self.interval
-                if delay > 0:
-                    access_rate = access_count / delay
-                    if access_rate >= limit_rate:
-                        cause = "{} accessed server {}-times in {} secs which is too much for rate {} accesses / {}".format(
-                            log_entry.ip_str, access_count, delay, self.allow_access, self.interval)
-                        self._update_deny(log_entry, access_count)
-                        logging.info(cause)
-                        return True, cause
-                    else:
-                        self._update_access(log_entry, access_count)
-                        return False, None
-                    pass
-                else:
-                    if access_count > self.allow_access:
-                        self._update_deny(log_entry, access_count)
-                        cause ="{} accessed server {} in less than 0 secs which is too much for rate {} accesses / {}".format(
-                            log_entry.ip_str, access_count, delay, self.allow_access, self.interval)
-                        logging.info(cause)
-                        return True, cause
-                    else:
-                        self._update_access(log_entry, access_count)
-                        return False, None
+            with sqlite3.connect(self._sqlite_db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                c.execute("INSERT INTO processed_log_ip (ip, line, log_file) VALUES (?, ?, ?)",
+                          (log_entry.ip, log_entry.line, log_entry.log_file))
+                c.execute("SELECT ip, first_access, last_access, access_count FROM log_ip WHERE ip = ?",
+                          (ip_int,))
+                conn.commit()
+                row = c.fetchone()
         except sqlite3.OperationalError as ex:
             raise JudgmentException(
                 "Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.", errors=ex)
+
+        if row is None:
+            logging.debug("IP %s not found in log_ip", log_entry.ip_str)
+            self._add_log_entry(log_entry)
+            return False, None
+        else:
+            first_access = datetime.strptime(row['first_access'], DATETIME_FORMAT_PATTERN)
+            logging.debug("log time: %s  first access: %s", log_entry.time, first_access)
+            delay = (log_entry.time - first_access).total_seconds()
+            delay = abs(delay)
+            access_count = row['access_count'] + 1
+            logging.debug("%s accessed %s %s times in %d seconds", log_entry.ip_str, log_entry.request, access_count,
+                         delay)
+            limit_rate = self.allow_access / self.interval
+            if delay > 0:
+                access_rate = access_count / delay
+                if access_rate >= limit_rate:
+                    cause = "{} accessed server {}-times in {} secs which is too much for rate {} accesses / {}".format(
+                        log_entry.ip_str, access_count, delay, self.allow_access, self.interval)
+                    self._update_deny(log_entry, access_count)
+                    logging.info(cause)
+                    return True, cause
+                else:
+                    self._update_access(log_entry, access_count)
+                    return False, None
+                pass
+            else:
+                if access_count > self.allow_access:
+                    self._update_deny(log_entry, access_count)
+                    cause ="{} accessed server {} in less than 0 secs which is too much for rate {} accesses / {}".format(
+                        log_entry.ip_str, access_count, delay, self.allow_access, self.interval)
+                    logging.info(cause)
+                    return True, cause
+                else:
+                    self._update_access(log_entry, access_count)
+                    return False, None
+
 
     def _lookup_decision_cache(self, log_entry:LogEntry) -> (bool, str):
         try:
@@ -240,14 +241,15 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         time_iso = log_entry['time'].strftime(DATETIME_FORMAT_PATTERN)
         sql_cmd = """INSERT INTO log_ip (ip, first_access, last_access, access_count) 
                                          VALUES (?, ?, ?, ?)"""
-        conn = sqlite3.connect(self._sqlite_db_path)
+        # conn =
         try:
-            with conn:
+            with sqlite3.connect(self._sqlite_db_path) as conn:
                 conn.execute(sql_cmd, (log_entry.ip,
                                        time_iso,
                                        time_iso,
                                        1)
                              )
+                #conn.commit()
         except sqlite3.OperationalError:
             logging.warning("Cannot insert new log to log_ip")
         logging.info("added %s to log_ip", log_entry.ip_str)
@@ -289,7 +291,7 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
             with sqlite3.connect(self._sqlite_db_path) as conn:
                 # Begin Transaction
                 conn.execute(update_cmd, (local_datetime(), access_count, log_entry.ip))
-                conn.commit()
+                #conn.commit()
                 # finish
                 logging.debug("update access_count of %s to %s", log_entry.ip_str, access_count)
         except sqlite3.OperationalError:
@@ -309,7 +311,7 @@ def lookup_ip(ip: str or int) -> str:
     return __lookup_ip(str_ip)
 
 
-@functools.lru_cache(maxsize=1024)
+@functools.lru_cache(maxsize=10240)
 def __lookup_ip(normed_ip: str) -> str:
     try:
         who = IPWhois(normed_ip).lookup_rdap()
