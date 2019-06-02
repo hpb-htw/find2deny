@@ -74,16 +74,19 @@ def validate_config(config: Dict):
     if LOG_FILES not in config:
         raise ParserConfigException("Log files are not configured")
 
+
 #TODO: test this method
 def analyse_log_files(config: Dict):
-    log_files = expand_log_files(config[LOG_FILES], database_path=config[DATABASE_PATH])
+    log_files = expand_log_files(config[LOG_FILES])
+    log_files = filter_processed_files(log_files, config[DATABASE_PATH])
     judge = construct_judgment(config)
     executor = execution.FileBasedUWFBlock(config[EXECUTION][0][RULES][SCRIPT])
     executor.begin_execute()
     log_pattern = config[LOG_PATTERN]
     for file_path in log_files:
         logging.info("Analyse file %s", file_path)
-        update_processed_file(file_path, config[DATABASE_PATH])
+        hash_content = content_hash(file_path)
+        update_processed_file(hash_content, file_path, config[DATABASE_PATH])
         logs = log_parser.parse_log_file(file_path, log_pattern)
         for log in logs:
             logging.debug("Process `%s'", log)
@@ -99,10 +102,9 @@ def analyse_log_files(config: Dict):
     executor.end_execute()
 
 
-def update_processed_file(file_path, database_path):
+def update_processed_file(hash_content, file_path, database_path):    # TODO: UNIT TEST
     if file_path.endswith("gz"):
         try:
-            hash_content = content_hash(file_path)
             with sqlite3.connect(database_path) as conn:
                 c = conn.cursor()
                 c.execute("""
@@ -125,7 +127,7 @@ def apache_access_log_file_chronological_decode(file_name):
     return -int(base_name[2]) if len(base_name) > 2 else 0
 
 
-def expand_log_files(config_log_file: List[str], database_path=None, key=apache_access_log_file_chronological_decode) -> List[str]:
+def expand_log_files(config_log_file: List[str]) -> List[str]:
     log_files = []
     for p in config_log_file:
         expand_path = glob.glob(p)
@@ -133,23 +135,27 @@ def expand_log_files(config_log_file: List[str], database_path=None, key=apache_
         if len(expand_path) == 0:
             logging.warn("Glob path '%s' cannot be expanded to any real path", p)
         log_files = log_files + expand_path
+    return log_files
+
+
+def filter_processed_files(log_files:List[str], database_path, key=apache_access_log_file_chronological_decode)-> List[str]:
     processed_files = []
-    if database_path is not None:
-        try:
-            with sqlite3.connect(database_path) as conn:
-                conn.row_factory = sqlite3.Row
-                c = conn.cursor()
-                for row in c.execute("SELECT content_hash, path FROM processed_log_file"):
-                    processed_files.append(row[0])
-                pass
-        except sqlite3.OperationalError:
-            logging.warning("Cannot read table processed_files in database {}, so use all expanded files".format(database_path))
+    try:
+        with sqlite3.connect(database_path) as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            for row in c.execute("SELECT content_hash, path FROM processed_log_file"):
+                processed_files.append(row[0])
+            pass
+    except sqlite3.OperationalError:
+        logging.warning(
+            "Cannot read table processed_files in database {}, so use all expanded files".format(database_path))
     effective_log_files = sorted((f for f in log_files if content_hash(f) not in processed_files), key=key)
     logging.info("Analyse %d file(s)", len(effective_log_files))
     return effective_log_files
 
 
-def content_hash(file_path):   # TODO: UNIT TEST
+def content_hash(file_path):
     h = hashlib.sha256()
     with open(file_path, 'rb') as f:
         for chunk in iter(lambda: f.read(4096), b""):
