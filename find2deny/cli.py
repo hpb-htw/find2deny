@@ -2,8 +2,9 @@ import sys
 from  os import path
 import argparse
 import logging
-import configparser
+import sqlite3
 import glob
+import hashlib
 
 from typing import List, Dict
 from pprint import pprint, pformat
@@ -64,7 +65,6 @@ def main():
 
 
 def apply_log_config(verbosity: str):
-    print(verbosity)
     log_level = logging.getLevelName(verbosity)
     logging.getLogger().setLevel(level=log_level)
     logging.info("Verbosity: %s %d", verbosity, log_level)
@@ -74,16 +74,16 @@ def validate_config(config: Dict):
     if LOG_FILES not in config:
         raise ParserConfigException("Log files are not configured")
 
-
 #TODO: test this method
 def analyse_log_files(config: Dict):
-    log_files = expand_log_files(config[LOG_FILES])
+    log_files = expand_log_files(config[LOG_FILES], database_path=config[DATABASE_PATH])
     judge = construct_judgment(config)
     executor = execution.FileBasedUWFBlock(config[EXECUTION][0][RULES][SCRIPT])
     executor.begin_execute()
     log_pattern = config[LOG_PATTERN]
     for file_path in log_files:
         logging.info("Analyse file %s", file_path)
+        update_processed_file(file_path, config[DATABASE_PATH])
         logs = log_parser.parse_log_file(file_path, log_pattern)
         for log in logs:
             logging.debug("Process `%s'", log)
@@ -99,12 +99,33 @@ def analyse_log_files(config: Dict):
     executor.end_execute()
 
 
+def update_processed_file(file_path, database_path):
+    if file_path.endswith("gz"):
+        try:
+            hash_content = content_hash(file_path)
+            with sqlite3.connect(database_path) as conn:
+                c = conn.cursor()
+                c.execute("""
+                    INSERT OR REPLACE INTO processed_log_file (content_hash, path) 
+                    VALUES (?,
+                        COALESCE((SELECT path FROM processed_log_file WHERE content_hash = ? AND path = ?), ?)
+                    )
+                    """,
+                    (hash_content,hash_content,file_path, file_path)
+                )
+                conn.commit()
+        except sqlite3.OperationalError as ex:
+            logging.warning("Cannot update table processed_files", ex)
+    else:
+        logging.info("File %s is not compressed, so not mark it as processed", file_path)
+
+
 def apache_access_log_file_chronological_decode(file_name):
     base_name = path.basename(file_name).split('.')
-    return -int(base_name[2]) if len(base_name) > 2 else 0;
+    return -int(base_name[2]) if len(base_name) > 2 else 0
 
 
-def expand_log_files(config_log_file: List[str], key=apache_access_log_file_chronological_decode) -> List:
+def expand_log_files(config_log_file: List[str], database_path=None, key=apache_access_log_file_chronological_decode) -> List[str]:
     log_files = []
     for p in config_log_file:
         expand_path = glob.glob(p)
@@ -112,9 +133,28 @@ def expand_log_files(config_log_file: List[str], key=apache_access_log_file_chro
         if len(expand_path) == 0:
             logging.warn("Glob path '%s' cannot be expanded to any real path", p)
         log_files = log_files + expand_path
-    log_files.sort(key=key)
-    logging.info("Analyse %d file(s)", len(log_files))
-    return log_files
+    processed_files = []
+    if database_path is not None:
+        try:
+            with sqlite3.connect(database_path) as conn:
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                for row in c.execute("SELECT content_hash, path FROM processed_log_file"):
+                    processed_files.append(row[0])
+                pass
+        except sqlite3.OperationalError:
+            logging.warning("Cannot read table processed_files in database {}, so use all expanded files".format(database_path))
+    effective_log_files = sorted((f for f in log_files if content_hash(f) not in processed_files), key=key)
+    logging.info("Analyse %d file(s)", len(effective_log_files))
+    return effective_log_files
+
+
+def content_hash(file_path):   # TODO: UNIT TEST
+    h = hashlib.sha256()
+    with open(file_path, 'rb') as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def construct_judgment(config) -> judgment.AbstractIpJudgment:
