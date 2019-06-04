@@ -56,7 +56,7 @@ def prepare_test_data(caplog):
     caplog.set_level(logging.DEBUG)
     logging.basicConfig(level=logging.DEBUG)
 
-    conn = db_connection.get_connection(test_db_path)
+    conn = sqlite3.connect(test_db_path)
     with conn:
         sql_code = '''
         DROP TABLE IF EXISTS processed_log_file;       
@@ -64,10 +64,9 @@ def prepare_test_data(caplog):
         conn.executescript(sql_code)
 
     judgment.init_database(test_db_path)
-    conn = db_connection.get_connection(test_db_path)
+    conn = sqlite3.connect(test_db_path)
     with conn:
         conn.executemany("INSERT INTO processed_log_file(content_hash, path) VALUES (?, ?)", file_processed_data)
-        ## conn.commit() ##
     conn.close()
     print("**********************init database done")
 
@@ -82,9 +81,9 @@ def test_expand_logfiles_with_cached(prepare_test_data):
 def test_update_not_yet_processed_file(prepare_test_data):
     hash_content = "3333"
     file_path = "test-data/some-dir/some-file.tar.gz"
-    cli.update_processed_file(hash_content, file_path, test_db_path)
-    conn = db_connection.get_connection(test_db_path)
+    conn = sqlite3.connect(test_db_path)
     with conn:
+        cli.update_processed_file(hash_content, file_path, conn)
         c = conn.cursor()
         c.execute("SELECT path FROM processed_log_file WHERE content_hash = ?", (hash_content,))
         expected_file_path = c.fetchone()[0]
@@ -92,25 +91,26 @@ def test_update_not_yet_processed_file(prepare_test_data):
     assert expected_file_path == file_path
 
 
-
 def test_update_ready_inserted_processed_file(prepare_test_data):
     hash_content = "3333"
     file_path = file_processed_data[1][1]  # change hash_content of file_path to 3333, distinct from ready inserted file
-    cli.update_processed_file(hash_content, file_path, test_db_path)
-    with db_connection.get_connection(test_db_path) as conn:
+    conn = sqlite3.connect(test_db_path)
+    with conn:
+        cli.update_processed_file(hash_content, file_path, conn)
         c = conn.cursor()
         c.execute("SELECT path FROM processed_log_file WHERE content_hash = ?", (hash_content,))
         expected_file_path = c.fetchone()[0]
-        assert expected_file_path == file_path
+    conn.close()
+    assert expected_file_path == file_path
     pass
 
 
 def test_update_ready_inserted_processed_file_2(prepare_test_data):
     hash_content = "2222" # change file_path of given hash_content
     file_path = "test-data/some-dir/some-file.tar.gz"
-    cli.update_processed_file(hash_content, file_path, test_db_path)
-    conn = db_connection.get_connection(test_db_path)
+    conn = sqlite3.connect(test_db_path)
     with conn:
+        cli.update_processed_file(hash_content, file_path, conn)
         c = conn.cursor()
         c.execute("SELECT path FROM processed_log_file WHERE content_hash = ?", (hash_content,))
         expected_file_path = c.fetchone()[0]

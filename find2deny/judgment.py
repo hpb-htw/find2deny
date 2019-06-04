@@ -28,11 +28,11 @@ def init_database(sqlite_db_path: str):
     pass
 
 
-def is_ready_blocked(log_entry: LogEntry, sqlite_db_path: str) -> (bool, str):
+def is_ready_blocked(log_entry: LogEntry, conn: sqlite3.Connection) -> (bool, str):
     @functools.lru_cache(maxsize=2024)
     def __cached_query(ip: int):
         try:
-            with db_connection.get_connection(sqlite_db_path) as conn:
+            with conn:
                 c = conn.cursor()
                 c.execute("SELECT COUNT(*), cause_of_block cause_of_block FROM block_network WHERE ip = ?", (ip,))
                 row = c.fetchone()
@@ -75,16 +75,17 @@ class ChainedIpJudgment(AbstractIpJudgment):
     def __init__(self, log_db_path: str, chains: List[AbstractIpJudgment]):
         self.__judgment = chains
         self.__log_db_path = log_db_path
+        self.conn = db_connection.get_connection(self.__log_db_path)
 
     def should_deny(self, log_entry: LogEntry) -> bool:
-        deny, cause = is_ready_blocked(log_entry, self.__log_db_path)
+        deny, cause = is_ready_blocked(log_entry, self.conn)
         if deny:
             return deny, cause
         for judgment in self.__judgment:
             deny, cause = judgment.should_deny(log_entry)
             if deny:
                 ip_network = lookup_ip(log_entry.ip)
-                update_deny(ip_network, log_entry,judgment.__class__.__name__, cause, self.__log_db_path)
+                update_deny(ip_network, log_entry,judgment.__class__.__name__, cause, self.conn)
                 return True, cause
         return False, None
 
@@ -123,7 +124,7 @@ class PathBasedIpJudgment(AbstractIpJudgment):
 
 class TimeBasedIpJudgment(AbstractIpJudgment):
 
-    def __init__(self, path: str, allow_access: int = 10, interval_second: int = 10):
+    def __init__(self, conn:sqlite3.Connection, allow_access: int = 10, interval_second: int = 10):
         """
         :param path: path to a SQLite Database file
         :param allow_access: number of access in a given time interval (next parameter)
@@ -131,7 +132,12 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         """
         self.allow_access = allow_access
         self.interval = interval_second
-        self._sqlite_db_path = path
+        # self._sqlite_db_path = path
+        self.conn = conn #db_connection.get_connection(self._sqlite_db_path)
+
+    def __del__(self):
+        pass
+
 
     def should_deny(self, log_entry: LogEntry) -> bool:
         """
@@ -148,16 +154,14 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         # TODO read table processed_log_ip to get Info about log_entry
         sql_cmd = "SELECT count(*) FROM processed_log_ip WHERE ip = ? AND line = ? AND log_file = ?"
         try:
-            conn = db_connection.get_connection(self._sqlite_db_path)
-            logging.info("Before %s", sql_cmd)
-            with conn:
+            ## conn = db_connection.get_connection(self._sqlite_db_path)
+            with self.conn as conn:
                 conn.row_factory = sqlite3.Row
                 c = conn.cursor()
                 c.execute(sql_cmd, (log_entry.ip, log_entry.line, log_entry.log_file))
                 row = c.fetchone()
                 ## conn.commit() ##
-            conn.close()
-            logging.info("After %s", sql_cmd)
+            ## conn.close()
             if not row or row is None:
                 return False
             else:
@@ -170,21 +174,15 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
 
     def _make_block_ip_decision(self, log_entry: LogEntry) -> (bool, str):
         ip_int = log_entry.ip
-        # row = None
         try:
-            conn = db_connection.get_connection(self._sqlite_db_path)
-            logging.info("Before Make decision")
-            with conn:
+            with self.conn as conn:
                 conn.row_factory = sqlite3.Row
                 c = conn.cursor()
                 c.execute("INSERT INTO processed_log_ip (ip, line, log_file) VALUES (?, ?, ?)",
                           (log_entry.ip, log_entry.line, log_entry.log_file))
                 c.execute("SELECT ip, first_access, last_access, access_count FROM log_ip WHERE ip = ?",
                           (ip_int,))
-                ## conn.commit() ##
                 row = c.fetchone()
-            conn.close()
-            logging.info("After Make decision")
         except sqlite3.OperationalError as ex:
             raise JudgmentException(
                 "Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.", errors=ex)
@@ -227,17 +225,12 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
 
     def _lookup_decision_cache(self, log_entry:LogEntry) -> (bool, str):
         try:
-            conn = db_connection.get_connection(self._sqlite_db_path)
-            logging.info("Before select")
-            with conn:
-                c = conn.cursor()
-                c.execute("SELECT count(*), cause_of_block FROM block_network WHERE ip = ?", (log_entry.ip,))
-                ## conn.commit() ##
-                row = c.fetchone()
-            conn.close()
-            logging.info("After select")
-            count = row[0]
-            cause = row[1] or None
+            with self.conn as conn:
+                # c = conn.cursor()
+                for row in conn.execute("SELECT count(*) as count_ip, cause_of_block FROM block_network WHERE ip = ?", (log_entry.ip,)):
+                    pass
+            count = row['count_ip']
+            cause = row['cause_of_block'] or None
             return (count == 1), cause
         except sqlite3.OperationalError as ex:
             raise JudgmentException(
@@ -248,15 +241,12 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         sql_cmd = """INSERT INTO log_ip (ip, first_access, last_access, access_count) 
                                          VALUES (?, ?, ?, ?)"""
         try:
-            conn = db_connection.get_connection(self._sqlite_db_path)
-            with conn:
+            with self.conn as conn:
                 conn.execute(sql_cmd, (log_entry.ip,
                                        time_iso,
                                        time_iso,
                                        1)
                              )
-                ## conn.commit() ##
-            conn.close()
         except sqlite3.OperationalError:
             logging.warning("Cannot insert new log to log_ip")
         logging.info("added %s to log_ip", log_entry.ip_str)
@@ -268,7 +258,6 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         :param access_count:
         :return:
         """
-        # Prepare data
         ip_network = lookup_ip(log_entry.ip)
         update_cmd = """UPDATE log_ip SET 
             ip_network = ?,
@@ -277,13 +266,11 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
             status = 1
             WHERE ip = ?
         """
-        # Begin Transaction
         try:
-            with db_connection.get_connection(self._sqlite_db_path) as conn:
+            with self.conn as conn:
                 conn.execute(update_cmd, (ip_network, log_entry.iso_time, access_count, log_entry.ip))
         except sqlite3.OperationalError:
             logging.warning("Cannot update log_ip")
-        # finish
         pass
 
     def _update_access(self, log_entry: LogEntry, access_count: int):
@@ -295,13 +282,8 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         """
         try:
             update_cmd = "UPDATE log_ip SET last_access = ?,  access_count = ? WHERE ip = ?"
-            conn = db_connection.get_connection(self._sqlite_db_path)
-            with conn:
-                # Begin Transaction
+            with self.conn as conn:
                 conn.execute(update_cmd, (local_datetime(), access_count, log_entry.ip))
-                ## conn.commit() ##
-                # finish
-            conn.close()
             logging.debug("update access_count of %s to %s", log_entry.ip_str, access_count)
         except sqlite3.OperationalError:
             print("Cannot update log_ip")

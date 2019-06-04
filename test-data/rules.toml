@@ -1,5 +1,5 @@
 verbosity = "INFO"
-log_files = ["test-data/apache2/access.log.14*"]
+log_files = ["test-data/apache2/access.log.*"]
 log_pattern = '%h %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i"'
 database_path="./dummy-db.sqlite"
 

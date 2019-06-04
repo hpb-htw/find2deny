@@ -79,19 +79,23 @@ def validate_config(config: Dict):
 # TODO: test this method
 def analyse_log_files(config: Dict):
     log_files = expand_log_files(config[LOG_FILES])
-    log_files = filter_processed_files(log_files, config[DATABASE_PATH])
+    conn = db_connection.get_connection(config[DATABASE_PATH])
+    log_files = filter_processed_files(log_files, conn)
     logging.info("Analyse %d file(s)", len(log_files))
     judge = construct_judgment(config)
     executor = execution.FileBasedUWFBlock(config[EXECUTION][0][RULES][SCRIPT])
     executor.begin_execute()
     log_pattern = config[LOG_PATTERN]
+    i = 0
     for file_path in log_files:
         logging.info("Analyse file %s", file_path)
-        update_processed_file(file_path[0], file_path[1], config[DATABASE_PATH])
+        update_processed_file(file_path[0], file_path[1], conn)
         logs = log_parser.parse_log_file(file_path[1], log_pattern)
         for log in logs:
-            logging.debug("Process `%s'", log)
-            blocked, cause = judgment.is_ready_blocked(log, config[DATABASE_PATH])
+            i += 1
+            logging.debug("%d Process `%s'", i, log)
+            logging.info("    [%d] %s", i, log.ip_str)
+            blocked, cause = judgment.is_ready_blocked(log, conn)
             if blocked:
                 logging.info("IP %s is ready blocked", log.ip_str)
             else:
@@ -119,29 +123,29 @@ def apache_access_log_file_chronological_decode(file_name):
     return -int(base_name[2]) if len(base_name) > 2 else 0
 
 
-def filter_processed_files(log_files:List[str], database_path, key=apache_access_log_file_chronological_decode)->List[str]:
+def filter_processed_files(log_files:List[str], conn: sqlite3.Connection, key=apache_access_log_file_chronological_decode)->List[str]:
     processed_files = []
     try:
-        conn = db_connection.get_connection(database_path)
+        ## conn = db_connection.get_connection(database_path)
         with conn:
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             for row in c.execute("SELECT content_hash, path FROM processed_log_file"):
                 processed_files.append(row[0])
             ## conn.commit() ##
-        conn.close()
+        ## conn.close()
     except sqlite3.OperationalError:
         logging.warning(
-            "Cannot read table processed_files in database {}, so use all expanded files".format(database_path))
+            "Cannot read table processed_files in database so use all expanded files")
     log_files_hash = map(lambda f: (content_hash(f), f), log_files)
     effective_log_files = sorted(filter(lambda hf: hf[0] not in processed_files, log_files_hash), key=lambda hf: key(hf[1]))
     return list(effective_log_files)
 
 
-def update_processed_file(hash_content, file_path, database_path):    # TODO: UNIT TEST
+def update_processed_file(hash_content, file_path, conn: sqlite3.Connection):    # TODO: UNIT TEST
     if file_path.endswith("gz"):
         try:
-            conn = db_connection.get_connection(database_path)
+            ## conn = db_connection.get_connection(database_path)
             with conn:
                 c = conn.cursor()
                 c.execute("""
@@ -153,7 +157,7 @@ def update_processed_file(hash_content, file_path, database_path):    # TODO: UN
                     (hash_content,hash_content,file_path, file_path)
                 )
                 ## conn.commit() ##
-            conn.close()
+            ## conn.close()
         except sqlite3.OperationalError as ex:
             logging.warning("Cannot update table processed_files %s", ex)
     else:
@@ -191,9 +195,10 @@ def judgment_by_name(judge, config):
     elif name == "time-based-judgment":
         if DATABASE_PATH in config:
             database_path = config[DATABASE_PATH]
-            max_request = judge[MAX_REQUEST] if MAX_REQUEST in judge else 500
-            interval = judge[INTERVAL_SECONDS] if INTERVAL_SECONDS in judge else 60
-            return judgment.TimeBasedIpJudgment(database_path, max_request, interval)
+            conn = db_connection.get_connection(database_path)
+            max_request = rules[MAX_REQUEST] if MAX_REQUEST in rules else 500
+            interval = rules[INTERVAL_SECONDS] if INTERVAL_SECONDS in rules else 60
+            return judgment.TimeBasedIpJudgment(conn, max_request, interval)
         else:
             _parser.error(f"A SQLite database ({DATABASE_PATH}) must be configured in global section if Judgment {name} is used")
     else:

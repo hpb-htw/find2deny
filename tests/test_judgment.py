@@ -30,7 +30,7 @@ def prepare_test_data(caplog):
     caplog.set_level(logging.DEBUG)
     logging.basicConfig(level=logging.DEBUG)
 
-    conn = db_connection.get_connection(test_db_path)
+    conn = sqlite3.connect(test_db_path)
     with conn:
         sql_code = '''
         DROP TABLE IF EXISTS log_ip;
@@ -40,7 +40,7 @@ def prepare_test_data(caplog):
         conn.executescript(sql_code)
 
     judgment.init_database(test_db_path)
-    conn = db_connection.get_connection(test_db_path)
+    conn = sqlite3.connect(test_db_path)
     with conn:
         conn.executemany("INSERT INTO log_ip (ip, first_access, last_access, access_count) VALUES (?, ? , ?, ?)", ip_data)
         conn.executemany("INSERT INTO processed_log_ip (ip, line, log_file) VALUES (?, ?, ?)", ip_processed_data)
@@ -100,7 +100,7 @@ def test_update_deny(prepare_test_data):
     judge = "judge of party"
     cause = "just for fun"
     judgment.update_deny(ip_network, log_entry, judge, cause, test_db_path)
-    conn = db_connection.get_connection(test_db_path)
+    conn = sqlite3.connect(test_db_path)
     c = conn.cursor()
     c.execute("SELECT COUNT(*), cause_of_block FROM block_network WHERE ip = ?", (log_entry.ip,))
     row = c.fetchone()
@@ -112,7 +112,6 @@ def test_update_deny(prepare_test_data):
 
 def test_time_based_judgment__ready_processed():
     global test_db_path
-    blocker = judgment.TimeBasedIpJudgment(test_db_path)
     processed_ip = ip_processed_data[0]
     log_entry = log_parser.LogEntry(
         processed_ip[2],
@@ -123,13 +122,16 @@ def test_time_based_judgment__ready_processed():
         status=401,
         byte=4286
     )
-    is_processed = blocker._ready_processed(log_entry)
-    assert is_processed is True
+    conn = sqlite3.connect(test_db_path)
+    with conn:
+        blocker = judgment.TimeBasedIpJudgment(conn)
+        is_processed = blocker._ready_processed(log_entry)
+        assert is_processed is True
+    conn.close()
 
 
 def test_time_based_judgment_should_deny__add_new_entry_to_log(prepare_test_data):
     global test_db_path
-    blocker = judgment.TimeBasedIpJudgment(test_db_path)
     ip = log_parser.ip_to_int('8.7.6.5')
     line = 512
     log_file = "some-log-file.log"
@@ -142,24 +144,28 @@ def test_time_based_judgment_should_deny__add_new_entry_to_log(prepare_test_data
         status=401,
         byte=4286
     )
-    to_be_deny, cause = blocker.should_deny(log_entry)
-    assert to_be_deny is False
-    conn = db_connection.get_connection(test_db_path)
-    c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM log_ip WHERE ip = ?", (ip,))
-    row = c.fetchone()
-    ip_count = row[0]
-    assert ip_count == 1
-    c.execute("SELECT COUNT(*) FROM processed_log_ip WHERE ip = ? AND line = ? AND log_file = ?",
-              (ip, line, log_file))
-    row2 = c.fetchone()
-    ip_count = row2[0]
-    assert ip_count == 1
+    conn = sqlite3.connect(test_db_path)
+    with conn:
+        blocker = judgment.TimeBasedIpJudgment(conn)
+        to_be_deny, cause = blocker.should_deny(log_entry)
+        assert to_be_deny is False
+
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM log_ip WHERE ip = ?", (ip,))
+        row = c.fetchone()
+        ip_count = row[0]
+        assert ip_count == 1
+        c.execute("SELECT COUNT(*) FROM processed_log_ip WHERE ip = ? AND line = ? AND log_file = ?",
+                  (ip, line, log_file))
+        row2 = c.fetchone()
+        ip_count = row2[0]
+        assert ip_count == 1
+    conn.close()
 
 
 def test_time_based_judgment_block_ip_network(prepare_test_data):
     global test_db_path
-    blocker = judgment.TimeBasedIpJudgment(test_db_path)
+
     ip = log_parser.ip_to_int('5.6.7.8')
     log_entry = log_parser.LogEntry(
         "some-log-file.log",
@@ -170,19 +176,21 @@ def test_time_based_judgment_block_ip_network(prepare_test_data):
         status=401,
         byte=4286
     )
-    to_be_deny, cause = blocker.should_deny(log_entry)
-    assert to_be_deny == True
-    conn = db_connection.get_connection(test_db_path)
-    c = conn.cursor()
-    c.execute("SELECT status FROM log_ip WHERE ip = ?", (ip,))
-    row = c.fetchone()
-    ip_count = row[0]
-    assert ip_count == 1
+    conn = sqlite3.connect(test_db_path)
+    with conn:
+        blocker = judgment.TimeBasedIpJudgment(conn)
+        to_be_deny, cause = blocker.should_deny(log_entry)
+        assert to_be_deny == True
+        c = conn.cursor()
+        c.execute("SELECT status FROM log_ip WHERE ip = ?", (ip,))
+        row = c.fetchone()
+        ip_count = row[0]
+        assert ip_count == 1
+    conn
 
 
 def test_time_based_judgment_update_access_time(prepare_test_data):
     global test_db_path
-    blocker = judgment.TimeBasedIpJudgment(test_db_path)
     ip = log_parser.ip_to_int('9.10.11.12')
     log_entry = log_parser.LogEntry(
         "some-log-file.log",
@@ -193,14 +201,17 @@ def test_time_based_judgment_update_access_time(prepare_test_data):
         status=401,
         byte=4286
     )
-    to_be_deny, cause = blocker.should_deny(log_entry)
-    assert to_be_deny == False
-    conn = db_connection.get_connection(test_db_path)
-    c = conn.cursor()
-    c.execute("SELECT access_count FROM log_ip WHERE ip = ?", (ip,))
-    row = c.fetchone()
-    ip_count = row[0]
-    assert ip_count == 5
+    conn = sqlite3.connect(test_db_path)
+    with conn:
+        blocker = judgment.TimeBasedIpJudgment(conn)
+        to_be_deny, cause = blocker.should_deny(log_entry)
+        assert to_be_deny == False
+        c = conn.cursor()
+        c.execute("SELECT access_count FROM log_ip WHERE ip = ?", (ip,))
+        row = c.fetchone()
+        ip_count = row[0]
+        assert ip_count == 5
+    conn.close()
 
 
 def test_lookup():
