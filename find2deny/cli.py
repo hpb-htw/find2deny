@@ -126,14 +126,11 @@ def apache_access_log_file_chronological_decode(file_name):
 def filter_processed_files(log_files:List[str], conn: sqlite3.Connection, key=apache_access_log_file_chronological_decode)->List[str]:
     processed_files = []
     try:
-        ## conn = db_connection.get_connection(database_path)
         with conn:
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             for row in c.execute("SELECT content_hash, path FROM processed_log_file"):
                 processed_files.append(row[0])
-            ## conn.commit() ##
-        ## conn.close()
     except sqlite3.OperationalError:
         logging.warning(
             "Cannot read table processed_files in database so use all expanded files")
@@ -145,7 +142,6 @@ def filter_processed_files(log_files:List[str], conn: sqlite3.Connection, key=ap
 def update_processed_file(hash_content, file_path, conn: sqlite3.Connection):    # TODO: UNIT TEST
     if file_path.endswith("gz"):
         try:
-            ## conn = db_connection.get_connection(database_path)
             with conn:
                 c = conn.cursor()
                 c.execute("""
@@ -156,8 +152,6 @@ def update_processed_file(hash_content, file_path, conn: sqlite3.Connection):   
                     """,
                     (hash_content,hash_content,file_path, file_path)
                 )
-                ## conn.commit() ##
-            ## conn.close()
         except sqlite3.OperationalError as ex:
             logging.warning("Cannot update table processed_files %s", ex)
     else:
@@ -180,7 +174,7 @@ def construct_judgment(config) -> judgment.AbstractIpJudgment:
     for judge in judgments_chain:
         list_of_judgments += [judgment_by_name(judge, config)]
     logging.info("Use %d judgments", len(list_of_judgments))
-    return judgment.ChainedIpJudgment( config[DATABASE_PATH], list_of_judgments)
+    return judgment.ChainedIpJudgment(db_connection.get_connection(config[DATABASE_PATH]), list_of_judgments)
 
 
 def judgment_by_name(judge, config):

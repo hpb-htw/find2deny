@@ -34,8 +34,8 @@ database_path="./dummy-db.sqlite"
 [[judgment]]
     name = "time-based-judgment"
     [judgment.rules]
-        max_request = 501
-        interval_seconds = 59
+        max_request = 50
+        interval_seconds = 1
 
 
 [[execution]]

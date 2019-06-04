@@ -70,6 +70,13 @@ clean-all: clean clean-db
 run-example:
 	find2deny-cli test-data/rules.cfg
 
+.PHONY: profile
+profile:
+	rm -f $(sqlite-db)
+	find2deny-init-db  $(sqlite-db)
+	time python -m cProfile -o myscript.cprof env/bin/find2deny-cli test-data/rules.toml &> stdout.txt
+
+
 # Auxiliary target run once after clone this project
 .PHONY: setup-dist-tool
 setup-dist-tool:

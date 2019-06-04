@@ -72,10 +72,10 @@ class AbstractIpJudgment(ABC):
 
 class ChainedIpJudgment(AbstractIpJudgment):
 
-    def __init__(self, log_db_path: str, chains: List[AbstractIpJudgment]):
+    def __init__(self, conn:sqlite3.Connection, chains: List[AbstractIpJudgment]):
         self.__judgment = chains
-        self.__log_db_path = log_db_path
-        self.conn = db_connection.get_connection(self.__log_db_path)
+        # self.__log_db_path = log_db_path
+        self.conn = conn # db_connection.get_connection(self.__log_db_path)
 
     def should_deny(self, log_entry: LogEntry) -> bool:
         deny, cause = is_ready_blocked(log_entry, self.conn)
@@ -124,7 +124,7 @@ class PathBasedIpJudgment(AbstractIpJudgment):
 
 class TimeBasedIpJudgment(AbstractIpJudgment):
 
-    def __init__(self, conn:sqlite3.Connection, allow_access: int = 10, interval_second: int = 10):
+    def __init__(self, sqlite_db_path:str, allow_access: int = 10, interval_second: int = 10):
         """
         :param path: path to a SQLite Database file
         :param allow_access: number of access in a given time interval (next parameter)
@@ -132,12 +132,11 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         """
         self.allow_access = allow_access
         self.interval = interval_second
-        # self._sqlite_db_path = path
-        self.conn = conn #db_connection.get_connection(self._sqlite_db_path)
+        self._sqlite_db_path = sqlite_db_path
+        self.conn = db_connection.get_connection(self._sqlite_db_path)
 
     def __del__(self):
         pass
-
 
     def should_deny(self, log_entry: LogEntry) -> bool:
         """
@@ -154,14 +153,11 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         # TODO read table processed_log_ip to get Info about log_entry
         sql_cmd = "SELECT count(*) FROM processed_log_ip WHERE ip = ? AND line = ? AND log_file = ?"
         try:
-            ## conn = db_connection.get_connection(self._sqlite_db_path)
             with self.conn as conn:
                 conn.row_factory = sqlite3.Row
                 c = conn.cursor()
                 c.execute(sql_cmd, (log_entry.ip, log_entry.line, log_entry.log_file))
                 row = c.fetchone()
-                ## conn.commit() ##
-            ## conn.close()
             if not row or row is None:
                 return False
             else:
@@ -195,33 +191,35 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
             first_access = datetime.strptime(row['first_access'], DATETIME_FORMAT_PATTERN)
             logging.debug("log time: %s  first access: %s", log_entry.time, first_access)
             delay = (log_entry.time - first_access).total_seconds()
-            delay = abs(delay)
             access_count = row['access_count'] + 1
             logging.debug("%s accessed %s %s times in %d seconds", log_entry.ip_str, log_entry.request, access_count,
                          delay)
             limit_rate = self.allow_access / self.interval
-            if delay > 0:
-                access_rate = access_count / delay
-                if access_rate >= limit_rate:
-                    cause = "{} accessed server {}-times in {} secs which is too much for rate {} accesses / {}".format(
-                        log_entry.ip_str, access_count, delay, self.allow_access, self.interval)
-                    self._update_deny(log_entry, access_count)
-                    logging.info(cause)
-                    return True, cause
-                else:
-                    self._update_access(log_entry, access_count)
-                    return False, None
-                pass
-            else:
-                if access_count > self.allow_access:
-                    self._update_deny(log_entry, access_count)
-                    cause ="{} accessed server {} in less than 0 secs which is too much for rate {} accesses / {}".format(
-                        log_entry.ip_str, access_count, delay, self.allow_access, self.interval)
-                    logging.info(cause)
-                    return True, cause
-                else:
-                    self._update_access(log_entry, access_count)
-                    return False, None
+            if delay >= 0:
+                try:
+                    access_rate = access_count / delay
+                    if access_rate >= limit_rate and delay <= self.interval:
+                        cause = "{} accessed server {}-times in {} secs which is too much for rate {} accesses / {}".format(
+                            log_entry.ip_str, access_count, delay, self.allow_access, self.interval)
+                        self._update_deny(log_entry, access_count)
+                        logging.info(cause)
+                        return True, cause
+                    else:
+                        self._update_access(log_entry, access_count)
+                        return False, None
+                    pass
+                except ZeroDivisionError as ex:
+                    if access_count > self.allow_access:
+                        self._update_deny(log_entry, access_count)
+                        cause = "{} accessed server {} in less than 0 secs which is too much for rate {} accesses / {}".format(
+                            log_entry.ip_str, access_count, delay, self.allow_access, self.interval)
+                        logging.info(cause)
+                        return True, cause
+                    else:
+                        self._update_access(log_entry, access_count)
+                        return False, None
+            else:raise JudgmentException("Logfile is not sorted by modified date: first access: {} last access: {}".
+                                        format(row['first_access'], log_entry.time))
 
     def _lookup_decision_cache(self, log_entry:LogEntry) -> (bool, str):
         try:
