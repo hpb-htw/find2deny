@@ -30,7 +30,7 @@ def prepare_test_data(caplog):
     caplog.set_level(logging.DEBUG)
     logging.basicConfig(level=logging.DEBUG)
 
-    conn = sqlite3.connect(test_db_path)
+    conn = db_connection.get_connection(test_db_path)
     with conn:
         sql_code = '''
         DROP TABLE IF EXISTS log_ip;
@@ -40,11 +40,12 @@ def prepare_test_data(caplog):
         conn.executescript(sql_code)
 
     judgment.init_database(test_db_path)
-
-    with sqlite3.connect(test_db_path) as conn:
+    conn = db_connection.get_connection(test_db_path)
+    with conn:
         conn.executemany("INSERT INTO log_ip (ip, first_access, last_access, access_count) VALUES (?, ? , ?, ?)", ip_data)
         conn.executemany("INSERT INTO processed_log_ip (ip, line, log_file) VALUES (?, ?, ?)", ip_processed_data)
-        conn.commit()
+        ## conn.commit() ##
+    conn.close()
     print("**********************init database done")
 
 
@@ -99,7 +100,7 @@ def test_update_deny(prepare_test_data):
     judge = "judge of party"
     cause = "just for fun"
     judgment.update_deny(ip_network, log_entry, judge, cause, test_db_path)
-    conn = sqlite3.connect(test_db_path)
+    conn = db_connection.get_connection(test_db_path)
     c = conn.cursor()
     c.execute("SELECT COUNT(*), cause_of_block FROM block_network WHERE ip = ?", (log_entry.ip,))
     row = c.fetchone()
@@ -143,7 +144,7 @@ def test_time_based_judgment_should_deny__add_new_entry_to_log(prepare_test_data
     )
     to_be_deny, cause = blocker.should_deny(log_entry)
     assert to_be_deny is False
-    conn = sqlite3.connect(test_db_path)
+    conn = db_connection.get_connection(test_db_path)
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM log_ip WHERE ip = ?", (ip,))
     row = c.fetchone()
@@ -171,7 +172,7 @@ def test_time_based_judgment_block_ip_network(prepare_test_data):
     )
     to_be_deny, cause = blocker.should_deny(log_entry)
     assert to_be_deny == True
-    conn = sqlite3.connect(test_db_path)
+    conn = db_connection.get_connection(test_db_path)
     c = conn.cursor()
     c.execute("SELECT status FROM log_ip WHERE ip = ?", (ip,))
     row = c.fetchone()
@@ -194,7 +195,7 @@ def test_time_based_judgment_update_access_time(prepare_test_data):
     )
     to_be_deny, cause = blocker.should_deny(log_entry)
     assert to_be_deny == False
-    conn = sqlite3.connect(test_db_path)
+    conn = db_connection.get_connection(test_db_path)
     c = conn.cursor()
     c.execute("SELECT access_count FROM log_ip WHERE ip = ?", (ip,))
     row = c.fetchone()

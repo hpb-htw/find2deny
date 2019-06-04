@@ -15,13 +15,13 @@ from importlib_resources import read_text
 
 from . log_parser import LogEntry, DATETIME_FORMAT_PATTERN
 from . import log_parser
+from . import db_connection
 
 
 def init_database(sqlite_db_path: str):
     sql_script = read_text("find2deny", "log-data.sql")
-    conn = sqlite3.connect(sqlite_db_path)
     try:
-        with conn:
+        with db_connection.get_connection(sqlite_db_path) as conn:
             conn.executescript(sql_script)
     except sqlite3.OperationalError as ex:
         raise JudgmentException(f"Cannot init database in sqlite file {sqlite_db_path}", error=ex)
@@ -29,11 +29,10 @@ def init_database(sqlite_db_path: str):
 
 
 def is_ready_blocked(log_entry: LogEntry, sqlite_db_path: str) -> (bool, str):
-    @functools.lru_cache(maxsize=128)
+    @functools.lru_cache(maxsize=2024)
     def __cached_query(ip: int):
-        conn = sqlite3.connect(sqlite_db_path)
         try:
-            with conn:
+            with db_connection.get_connection(sqlite_db_path) as conn:
                 c = conn.cursor()
                 c.execute("SELECT COUNT(*), cause_of_block cause_of_block FROM block_network WHERE ip = ?", (ip,))
                 row = c.fetchone()
@@ -49,11 +48,8 @@ def update_deny(ip_network: str, log_entry: LogEntry, judge:str, cause_of_block:
     # Prepare data
     # ip_network = lookup_ip(log_entry.ip)
     insert_cmd = "INSERT OR IGNORE INTO block_network (ip, ip_network, block_since, judge, cause_of_block) VALUES (?, ?, ?, ?, ?)"
-
-    conn = sqlite3.connect(sqlite_db_path)
-    # Begin Transaction
     try:
-        with conn:
+        with db_connection.get_connection(sqlite_db_path) as conn:
             conn.execute(insert_cmd, (log_entry.ip, ip_network, local_datetime(), judge, cause_of_block))
     except sqlite3.OperationalError as ex:
         raise JudgmentException("Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.",errors=ex)
@@ -152,19 +148,22 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         # TODO read table processed_log_ip to get Info about log_entry
         sql_cmd = "SELECT count(*) FROM processed_log_ip WHERE ip = ? AND line = ? AND log_file = ?"
         try:
-            with sqlite3.connect(self._sqlite_db_path) as conn:
+            conn = db_connection.get_connection(self._sqlite_db_path)
+            logging.info("Before %s", sql_cmd)
+            with conn:
                 conn.row_factory = sqlite3.Row
                 c = conn.cursor()
                 c.execute(sql_cmd, (log_entry.ip, log_entry.line, log_entry.log_file))
                 row = c.fetchone()
-                conn.commit()
-
-                if not row or row is None:
-                    return False
-                else:
-                    logging.debug("found %d processed ip in database log for entry %s ", row[0], log_entry)
-                    ip_count = row[0]
-                    return ip_count == 1
+                ## conn.commit() ##
+            conn.close()
+            logging.info("After %s", sql_cmd)
+            if not row or row is None:
+                return False
+            else:
+                logging.debug("found %d processed ip in database log for entry %s ", row[0], log_entry)
+                ip_count = row[0]
+                return ip_count == 1
         except sqlite3.OperationalError:
             logging.warning("Cannot make connection to database file %s", self._sqlite_db_path)
             return False
@@ -173,15 +172,19 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         ip_int = log_entry.ip
         # row = None
         try:
-            with sqlite3.connect(self._sqlite_db_path) as conn:
+            conn = db_connection.get_connection(self._sqlite_db_path)
+            logging.info("Before Make decision")
+            with conn:
                 conn.row_factory = sqlite3.Row
                 c = conn.cursor()
                 c.execute("INSERT INTO processed_log_ip (ip, line, log_file) VALUES (?, ?, ?)",
                           (log_entry.ip, log_entry.line, log_entry.log_file))
                 c.execute("SELECT ip, first_access, last_access, access_count FROM log_ip WHERE ip = ?",
                           (ip_int,))
-                conn.commit()
+                ## conn.commit() ##
                 row = c.fetchone()
+            conn.close()
+            logging.info("After Make decision")
         except sqlite3.OperationalError as ex:
             raise JudgmentException(
                 "Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.", errors=ex)
@@ -222,17 +225,20 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
                     self._update_access(log_entry, access_count)
                     return False, None
 
-
     def _lookup_decision_cache(self, log_entry:LogEntry) -> (bool, str):
         try:
-            with sqlite3.connect(self._sqlite_db_path) as conn:
+            conn = db_connection.get_connection(self._sqlite_db_path)
+            logging.info("Before select")
+            with conn:
                 c = conn.cursor()
                 c.execute("SELECT count(*), cause_of_block FROM block_network WHERE ip = ?", (log_entry.ip,))
-                conn.commit()
+                ## conn.commit() ##
                 row = c.fetchone()
-                count = row[0]
-                cause = row[1] or None
-                return (count == 1), cause
+            conn.close()
+            logging.info("After select")
+            count = row[0]
+            cause = row[1] or None
+            return (count == 1), cause
         except sqlite3.OperationalError as ex:
             raise JudgmentException(
                 "Access to Sqlite Db caused error; Diagnose: use `find2deny-init-db' to create a Database.", errors=ex)
@@ -241,15 +247,16 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         time_iso = log_entry['time'].strftime(DATETIME_FORMAT_PATTERN)
         sql_cmd = """INSERT INTO log_ip (ip, first_access, last_access, access_count) 
                                          VALUES (?, ?, ?, ?)"""
-        # conn =
         try:
-            with sqlite3.connect(self._sqlite_db_path) as conn:
+            conn = db_connection.get_connection(self._sqlite_db_path)
+            with conn:
                 conn.execute(sql_cmd, (log_entry.ip,
                                        time_iso,
                                        time_iso,
                                        1)
                              )
-                #conn.commit()
+                ## conn.commit() ##
+            conn.close()
         except sqlite3.OperationalError:
             logging.warning("Cannot insert new log to log_ip")
         logging.info("added %s to log_ip", log_entry.ip_str)
@@ -272,7 +279,7 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         """
         # Begin Transaction
         try:
-            with sqlite3.connect(self._sqlite_db_path) as conn:
+            with db_connection.get_connection(self._sqlite_db_path) as conn:
                 conn.execute(update_cmd, (ip_network, log_entry.iso_time, access_count, log_entry.ip))
         except sqlite3.OperationalError:
             logging.warning("Cannot update log_ip")
@@ -288,12 +295,14 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
         """
         try:
             update_cmd = "UPDATE log_ip SET last_access = ?,  access_count = ? WHERE ip = ?"
-            with sqlite3.connect(self._sqlite_db_path) as conn:
+            conn = db_connection.get_connection(self._sqlite_db_path)
+            with conn:
                 # Begin Transaction
                 conn.execute(update_cmd, (local_datetime(), access_count, log_entry.ip))
-                #conn.commit()
+                ## conn.commit() ##
                 # finish
-                logging.debug("update access_count of %s to %s", log_entry.ip_str, access_count)
+            conn.close()
+            logging.debug("update access_count of %s to %s", log_entry.ip_str, access_count)
         except sqlite3.OperationalError:
             print("Cannot update log_ip")
         pass

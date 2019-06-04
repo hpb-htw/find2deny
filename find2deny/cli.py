@@ -20,6 +20,7 @@ from . config_parser import ParserConfigException, \
 from . import log_parser
 from . import judgment
 from . import execution
+from . import db_connection
 
 # work-flow
 # 1. suche alle IP in Logfile nach Merkmale eines Angriff
@@ -75,19 +76,19 @@ def validate_config(config: Dict):
         raise ParserConfigException("Log files are not configured")
 
 
-#TODO: test this method
+# TODO: test this method
 def analyse_log_files(config: Dict):
     log_files = expand_log_files(config[LOG_FILES])
     log_files = filter_processed_files(log_files, config[DATABASE_PATH])
+    logging.info("Analyse %d file(s)", len(log_files))
     judge = construct_judgment(config)
     executor = execution.FileBasedUWFBlock(config[EXECUTION][0][RULES][SCRIPT])
     executor.begin_execute()
     log_pattern = config[LOG_PATTERN]
     for file_path in log_files:
         logging.info("Analyse file %s", file_path)
-        hash_content = content_hash(file_path)
-        update_processed_file(hash_content, file_path, config[DATABASE_PATH])
-        logs = log_parser.parse_log_file(file_path, log_pattern)
+        update_processed_file(file_path[0], file_path[1], config[DATABASE_PATH])
+        logs = log_parser.parse_log_file(file_path[1], log_pattern)
         for log in logs:
             logging.debug("Process `%s'", log)
             blocked, cause = judgment.is_ready_blocked(log, config[DATABASE_PATH])
@@ -102,31 +103,6 @@ def analyse_log_files(config: Dict):
     executor.end_execute()
 
 
-def update_processed_file(hash_content, file_path, database_path):    # TODO: UNIT TEST
-    if file_path.endswith("gz"):
-        try:
-            with sqlite3.connect(database_path) as conn:
-                c = conn.cursor()
-                c.execute("""
-                    INSERT OR REPLACE INTO processed_log_file (content_hash, path) 
-                    VALUES (?,
-                        COALESCE((SELECT path FROM processed_log_file WHERE content_hash = ? AND path = ?), ?)
-                    )
-                    """,
-                    (hash_content,hash_content,file_path, file_path)
-                )
-                conn.commit()
-        except sqlite3.OperationalError as ex:
-            logging.warning("Cannot update table processed_files", ex)
-    else:
-        logging.info("File %s is not compressed, so not mark it as processed", file_path)
-
-
-def apache_access_log_file_chronological_decode(file_name):
-    base_name = path.basename(file_name).split('.')
-    return -int(base_name[2]) if len(base_name) > 2 else 0
-
-
 def expand_log_files(config_log_file: List[str]) -> List[str]:
     log_files = []
     for p in config_log_file:
@@ -138,21 +114,50 @@ def expand_log_files(config_log_file: List[str]) -> List[str]:
     return log_files
 
 
-def filter_processed_files(log_files:List[str], database_path, key=apache_access_log_file_chronological_decode)-> List[str]:
+def apache_access_log_file_chronological_decode(file_name):
+    base_name = path.basename(file_name).split('.')
+    return -int(base_name[2]) if len(base_name) > 2 else 0
+
+
+def filter_processed_files(log_files:List[str], database_path, key=apache_access_log_file_chronological_decode)->List[str]:
     processed_files = []
     try:
-        with sqlite3.connect(database_path) as conn:
+        conn = db_connection.get_connection(database_path)
+        with conn:
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             for row in c.execute("SELECT content_hash, path FROM processed_log_file"):
                 processed_files.append(row[0])
-            pass
+            ## conn.commit() ##
+        conn.close()
     except sqlite3.OperationalError:
         logging.warning(
             "Cannot read table processed_files in database {}, so use all expanded files".format(database_path))
-    effective_log_files = sorted((f for f in log_files if content_hash(f) not in processed_files), key=key)
-    logging.info("Analyse %d file(s)", len(effective_log_files))
-    return effective_log_files
+    log_files_hash = map(lambda f: (content_hash(f), f), log_files)
+    effective_log_files = sorted(filter(lambda hf: hf[0] not in processed_files, log_files_hash), key=lambda hf: key(hf[1]))
+    return list(effective_log_files)
+
+
+def update_processed_file(hash_content, file_path, database_path):    # TODO: UNIT TEST
+    if file_path.endswith("gz"):
+        try:
+            conn = db_connection.get_connection(database_path)
+            with conn:
+                c = conn.cursor()
+                c.execute("""
+                    INSERT OR REPLACE INTO processed_log_file (content_hash, path) 
+                    VALUES (?,
+                        COALESCE((SELECT path FROM processed_log_file WHERE content_hash = ? AND path = ?), ?)
+                    )
+                    """,
+                    (hash_content,hash_content,file_path, file_path)
+                )
+                ## conn.commit() ##
+            conn.close()
+        except sqlite3.OperationalError as ex:
+            logging.warning("Cannot update table processed_files %s", ex)
+    else:
+        logging.info("File %s is not compressed, so not mark it as processed", file_path)
 
 
 def content_hash(file_path):
