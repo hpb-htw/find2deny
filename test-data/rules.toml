@@ -3,38 +3,14 @@ log_files = ["test-data/apache2/access.log.*"]
 log_pattern = '%h %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i"'
 database_path="./dummy-db.sqlite"
 
-
-[[judgment]]
-    name = "path-based-judgment"
-    [judgment.rules]
-        bot_request = [
-            "/?XDEBUG_SESSION_START=phpstorm",
-            "/phpMyAdmin/",
-            "/pma/",
-            "/myadmin/",
-            "/MyAdmin/",
-            "/mahua/",
-            "/wp-login",
-            "/webdav/",
-            "/help.php",
-            "/java.php",
-            "/db_pma.php",
-            "/logon.php",
-            "/help-e.php",
-            "/hell.php",
-            "/defect.php",
-            "/webslee.php",
-            "http://www.123cha.com/",
-            "http://www.wujieliulan.com/",
-            "http://www.epochtimes.com/",
-            "http://www.ip.cn/",
-            "www.baidu.com:443"
-        ]
+white_list = [
+    "134.96.0.0/16"
+]
 
 [[judgment]]
     name = "time-based-judgment"
     [judgment.rules]
-        max_request = 50
+        max_request = 20
         interval_seconds = 1
 
 

@@ -232,3 +232,38 @@ def test_lookup():
     assert network_cache == expected_network
 
     assert cache_lookup_duration <= first_lookup_duration
+
+
+def test_white_list():
+    ip = "34.96.214.15"
+    white_list_fn = judgment.make_ip_check_fn(ip)
+    white_list = []
+    assert next((item for item in white_list if white_list_fn(item)), None) is None
+
+
+def test_white_list_no_match():
+    ip = "34.96.214.15"
+    white_list_fn = judgment.make_ip_check_fn(ip)
+    white_list = ["134.95.96.7", "134.95.96.9"]
+    assert next((item for item in white_list if white_list_fn(item)), None) is None
+
+
+def test_white_list_equal():
+    ip = "134.96.214.15"
+    white_list_fn = judgment.make_ip_check_fn(ip)
+    white_list = ["134.96.214.15"]
+    assert next((item for item in white_list if white_list_fn(item)), None) == white_list[0]
+
+
+def test_white_list_subnet():
+    ip = "134.96.214.15"
+    white_list_fn = judgment.make_ip_check_fn(ip)
+    white_list = ["134.96.0.0/16"]
+    assert next((item for item in white_list if white_list_fn(item)), None) == white_list[0]
+
+
+def test_white_list_reg():
+    ip = "134.96.214.15"
+    white_list_fn = judgment.make_ip_check_fn(ip)
+    white_list = [r"134\.96\.\d+\.\d+"]
+    assert next((item for item in white_list if white_list_fn(item)), None) == white_list[0]

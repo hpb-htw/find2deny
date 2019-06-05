@@ -42,8 +42,10 @@ test-release: clean-all dev-release
 	pip install --index-url https://test.pypi.org/simple/ --no-deps $(project_name)
 	git commit -a -m "release OK at `date`"
 
-$(__version__): Makefile
+$(__version__): FORCE
 	echo __version__ = \'$(version)-`date "+%s"`\' > $@
+
+FORCE: ;
 
 .PHONY: unittest
 unittest:
@@ -67,14 +69,14 @@ clean-all: clean clean-db
 
 
 .PHONY: run-example
-run-example:
-	find2deny-cli test-data/rules.cfg
+run-example: clean-db
+	find2deny-init-db $(sqlite-db)
+	find2deny-cli test-data/rules.toml
 
 .PHONY: profile
-profile:
-	rm -f $(sqlite-db)
+profile: clean-db local-install
 	find2deny-init-db  $(sqlite-db)
-	time python -m cProfile -o myscript.cprof env/bin/find2deny-cli test-data/rules.toml &> stdout.txt
+	time python -m cProfile -o myscript.cprof venv/bin/find2deny-cli test-data/rules.toml &> stdout.txt
 
 
 # Auxiliary target run once after clone this project

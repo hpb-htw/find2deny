@@ -12,6 +12,7 @@ from pprint import pprint, pformat
 from . config_parser import ParserConfigException, \
     VERBOSITY, LOG_LEVELS, CONF_FILE, \
     LOG_FILES, LOG_PATTERN, DATABASE_PATH, \
+    WHITE_LIST, \
     JUDGMENT, RULES, \
     BOT_REQUEST, MAX_REQUEST, INTERVAL_SECONDS, \
     EXECUTION, SCRIPT, \
@@ -21,6 +22,9 @@ from . import log_parser
 from . import judgment
 from . import execution
 from . import db_connection
+
+
+LOGGER = logging.getLogger(__name__)
 
 # work-flow
 # 1. suche alle IP in Logfile nach Merkmale eines Angriff
@@ -56,11 +60,11 @@ def main():
     file_based_config = parse_config_file(cli_arg[CONF_FILE])
     if verbosity is not None:
         file_based_config[VERBOSITY] = verbosity
-    if logging.getLogger("root").isEnabledFor(logging.DEBUG): logging.debug(pformat(file_based_config))
+    if logging.getLogger("root").isEnabledFor(logging.DEBUG): LOGGER.debug(pformat(file_based_config))
     validate_config(file_based_config)
     try:
         apply_log_config(file_based_config[VERBOSITY])
-        analyse_log_files(file_based_config)
+        return analyse_log_files(file_based_config)
     except judgment.JudgmentException as ex:
         print(ex, file=sys.stderr)
 
@@ -68,7 +72,11 @@ def main():
 def apply_log_config(verbosity: str):
     log_level = logging.getLevelName(verbosity)
     logging.getLogger().setLevel(level=log_level)
-    logging.info("Verbosity: %s %d", verbosity, log_level)
+    logging.basicConfig(
+        format='%(relativeCreated)d %(levelname)s %(module)s : %(message)s',
+        datefmt='%H:%M:%S',
+    )
+    LOGGER.info("Verbosity: %s %d", verbosity, log_level)
 
 
 def validate_config(config: Dict):
@@ -81,39 +89,50 @@ def analyse_log_files(config: Dict):
     log_files = expand_log_files(config[LOG_FILES])
     conn = db_connection.get_connection(config[DATABASE_PATH])
     log_files = filter_processed_files(log_files, conn)
-    logging.info("Analyse %d file(s)", len(log_files))
+    LOGGER.info("Analyse %d file(s)", len(log_files))
     judge = construct_judgment(config)
     executor = execution.FileBasedUWFBlock(config[EXECUTION][0][RULES][SCRIPT])
     executor.begin_execute()
     log_pattern = config[LOG_PATTERN]
     i = 0
-    for file_path in log_files:
-        logging.info("Analyse file %s", file_path)
-        update_processed_file(file_path[0], file_path[1], conn)
-        logs = log_parser.parse_log_file(file_path[1], log_pattern)
-        for log in logs:
-            i += 1
-            logging.debug("%d Process `%s'", i, log)
-            logging.info("    [%d] %s", i, log.ip_str)
-            blocked, cause = judgment.is_ready_blocked(log, conn)
-            if blocked:
-                logging.info("IP %s is ready blocked", log.ip_str)
-            else:
-                deny, cause = judge.should_deny(log)
-                if deny:
-                    network = judgment.lookup_ip(log.ip_str)
-                    log.network = network
-                    executor.block(log, cause)
+    try:
+        for file_path in log_files:
+            LOGGER.info("Analyse file %s", file_path)
+            update_processed_file(file_path[0], file_path[1], conn)
+            logs = log_parser.parse_log_file(file_path[1], log_pattern)
+            for log in logs:
+                i += 1
+                LOGGER.debug("                       [%d] Process `%s'", i, log)
+                blocked, cause = judgment.is_ready_blocked(log, conn)
+                if blocked:
+                    LOGGER.info("IP %s is ready blocked", log.ip_str)
+                else:
+                    deny, cause = judge.should_deny(log, i)
+                    if deny:
+                        network = judgment.lookup_ip(log.ip_str)
+                        log.network = network
+                        executor.block(log, cause)
+    except KeyboardInterrupt:  # Will not work with python -m cProfile
+        LOGGER.warning("Stop processing log files")
+        LOGGER.info("current log files: {}".format(file_path))
+        LOGGER.info("Write ready processed log entries to files")
+        executor.end_execute()
+        try:
+            conn.close()
+        except Exception as ex:
+            LOGGER.warning("Cannot close Sql DbConnection {}", ex)
+        return 1
     executor.end_execute()
+    return 0
 
 
 def expand_log_files(config_log_file: List[str]) -> List[str]:
     log_files = []
     for p in config_log_file:
         expand_path = glob.glob(p)
-        logging.debug("expand glob '%s' to %s", p, expand_path)
+        LOGGER.debug("expand glob '%s' to %s", p, expand_path)
         if len(expand_path) == 0:
-            logging.warn("Glob path '%s' cannot be expanded to any real path", p)
+            LOGGER.warn("Glob path '%s' cannot be expanded to any real path", p)
         log_files = log_files + expand_path
     return log_files
 
@@ -132,7 +151,7 @@ def filter_processed_files(log_files:List[str], conn: sqlite3.Connection, key=ap
             for row in c.execute("SELECT content_hash, path FROM processed_log_file"):
                 processed_files.append(row[0])
     except sqlite3.OperationalError:
-        logging.warning(
+        LOGGER.warning(
             "Cannot read table processed_files in database so use all expanded files")
     log_files_hash = map(lambda f: (content_hash(f), f), log_files)
     effective_log_files = sorted(filter(lambda hf: hf[0] not in processed_files, log_files_hash), key=lambda hf: key(hf[1]))
@@ -153,9 +172,9 @@ def update_processed_file(hash_content, file_path, conn: sqlite3.Connection):   
                     (hash_content,hash_content,file_path, file_path)
                 )
         except sqlite3.OperationalError as ex:
-            logging.warning("Cannot update table processed_files %s", ex)
+            LOGGER.warning("Cannot update table processed_files %s", ex)
     else:
-        logging.info("File %s is not compressed, so not mark it as processed", file_path)
+        LOGGER.info("File %s is not compressed, so not mark it as processed", file_path)
 
 
 def content_hash(file_path):
@@ -173,8 +192,8 @@ def construct_judgment(config) -> judgment.AbstractIpJudgment:
     list_of_judgments = []
     for judge in judgments_chain:
         list_of_judgments += [judgment_by_name(judge, config)]
-    logging.info("Use %d judgments", len(list_of_judgments))
-    return judgment.ChainedIpJudgment(db_connection.get_connection(config[DATABASE_PATH]), list_of_judgments)
+    LOGGER.info("Use %d judgments", len(list_of_judgments))
+    return judgment.ChainedIpJudgment(db_connection.get_connection(config[DATABASE_PATH]), list_of_judgments, config[WHITE_LIST])
 
 
 def judgment_by_name(judge, config):

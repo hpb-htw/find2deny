@@ -14,6 +14,9 @@ LOG_FILES = "log_files"
 LOG_PATTERN = "log_pattern"
 DATABASE_PATH = "database_path"
 
+# Whitelist
+WHITE_LIST = "white_list"
+
 # Judgments configuration
 JUDGMENT = "judgment"
 RULES = "rules"
