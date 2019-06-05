@@ -31,7 +31,7 @@ Or to install the latest development version, run:
 Quick Tutorial
 ==============
 
-For example, you have a set of Apache Logfile in directory ``apache2``: ``access.log.1``, ``access.log.2``, ...
+For example, you have a set of Apache Logfile in directory ``apache2``: ``access.log.1``, ``access.log.2.gz``, ...
 The python script ``find2deny-cli`` can create a shell-Script ``block-ip.sh`` which contains commands like:
 
 ::
@@ -43,72 +43,75 @@ The python script ``find2deny-cli`` can create a shell-Script ``block-ip.sh`` wh
 
 1. Make a Configuration-File: Simple copy this configuration to a file, say ``config.toml``
 
-::
+        ::
 
-    verbosity = "INFO"
-    log_files = ["apache2/access.log.*"]
-    log_pattern = '%h %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i"'
-    database_path="./blocked-ip.sqlite"
-
-
-    [[judgment]]
-        name = "path-based-judgment"
-        [judgment.rules]
-            bot_request = [
-                "/?XDEBUG_SESSION_START=phpstorm",
-                "/phpMyAdmin/",
-                "/pma/",
-                "/myadmin/",
-                "/MyAdmin/",
-                "/mahua/",
-                "/wp-login",
-                "/webdav/",
-                "/help.php",
-                "/java.php",
-                "/db_pma.php",
-                "/logon.php",
-                "/help-e.php",
-                "/hell.php",
-                "/defect.php",
-                "/webslee.php",
-                "http://www.123cha.com/",
-                "http://www.wujieliulan.com/",
-                "http://www.epochtimes.com/",
-                "http://www.ip.cn/",
-                "www.baidu.com:443"
-            ]
-
-    [[judgment]]
-        name = "time-based-judgment"
-        [judgment.rules]
-            max_request = 501
-            interval_seconds = 59
+            verbosity = "INFO"
+            # Path to apache log files in system
+            log_files = ["apache2/access.log.*"]
+            # Log Pattern
+            log_pattern = '%h %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i"'
+            # temporary sqlite database
+            database_path="./blocked-ip.sqlite"
 
 
-    [[execution]]
-        name = "ufw_cmd_script"
-        [execution.rules]
-            script = "./block-ip.sh"
+            [[judgment]]
+                name = "path-based-judgment"
+                [judgment.rules]
+                    bot_request = [
+                        "/?XDEBUG_SESSION_START=phpstorm",
+                        "/phpMyAdmin/",
+                        "/pma/",
+                        "/myadmin/",
+                        "/MyAdmin/",
+                        "/mahua/",
+                        "/wp-login",
+                        "/webdav/",
+                        "/help.php",
+                        "/java.php",
+                        "/db_pma.php",
+                        "/logon.php",
+                        "/help-e.php",
+                        "/hell.php",
+                        "/defect.php",
+                        "/webslee.php",
+                        "http://www.123cha.com/",
+                        "http://www.wujieliulan.com/",
+                        "http://www.epochtimes.com/",
+                        "http://www.ip.cn/",
+                        "www.baidu.com:443"
+                    ]
+
+            [[judgment]]
+                name = "time-based-judgment"
+                [judgment.rules]
+                    max_request = 501
+                    interval_seconds = 59
+
+
+            [[execution]]
+                name = "ufw_cmd_script"
+                [execution.rules]
+                    script = "./block-ip.sh"
 
 
 2. Run script
 
-::
+    ::
 
-    find2deny-init-db blocked-ip.sqlite
+        find2deny-init-db blocked-ip.sqlite
 
-to create a Sqlite-Database in file ``blocked-ip.sqlite``. The filename must match the configuration
-``database_path`` in the file ``config.toml``.
+    to create a Sqlite-Database in file ``blocked-ip.sqlite``. The filename must match the configuration
+    ``database_path`` in the file ``config.toml``.
 
 3. Run
 
-::
+    ::
 
-    find2deny-cli config.toml --verbosity=DEBUG
+        find2deny-cli config.toml --verbosity=DEBUG
 
 
-to create file ``block-ip.sh``. Then you can examinate the file ``block-ip.sh`` and run it from your shell
-to update your firewall.
+    to create file ``block-ip.sh``. Then you can examinate the file ``block-ip.sh`` and run it from your shell
+    to update your firewall.
 
 
 
