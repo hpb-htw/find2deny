@@ -3,8 +3,7 @@
 
 `find2deny-cli <config-file.toml>`
 
-`config-file` a file which https://docs.python.org/3/library/configparser.html
-can parse. Example
+`config-file` a TOML file 
 
 ```toml
 TODO!
