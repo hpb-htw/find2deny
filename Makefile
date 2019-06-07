@@ -2,7 +2,7 @@
 #
 
 project_name = find2deny
-version = 0.1.18
+version = 0.1.20
 compile = python3 setup.py sdist bdist_wheel
 python_files = $(shell find find2deny -name "*.py")
 __version__ = $(project_name)/__version__.py
@@ -21,7 +21,7 @@ dev-compile: $(python_files) $(__version__)
 	$(compile)
 
 .PHONY:release
-release: compile
+release: clean compile
 	python3 -m twine upload dist/*
 
 .PHONY: compile
