@@ -41,8 +41,7 @@ setup(
     ],
     keywords='logfile-analyse',
     url='http://mathcoach.htwsaar.de/',
-    author='Hong-Phuc Bui',
-    author_email='hong-phuc.bui@htwsaar.de',
+    author='Hong-Phuc Bui <hong-phuc (dot) bui (at) htwsaar (dot) de>',
     license='MIT',
     packages=find_packages(exclude=["docs", "build", "tests"]),
     package_data={
