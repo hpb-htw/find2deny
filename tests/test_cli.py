@@ -49,6 +49,7 @@ file_processed_data = [
 ]
 
 
+from importlib_resources import read_text
 @pytest.fixture
 def prepare_test_data(caplog):
     global test_db_path
@@ -58,12 +59,14 @@ def prepare_test_data(caplog):
 
     conn = sqlite3.connect(test_db_path)
     with conn:
+        sql_script = read_text("find2deny", "log-data.sql")
         sql_code = '''
         DROP TABLE IF EXISTS processed_log_file;       
-        '''
+        ''' + sql_script
         conn.executescript(sql_code)
-
-    judgment.init_database(test_db_path)
+        conn.commit()
+    conn.close()
+    # judgment.init_database(test_db_path)
     conn = sqlite3.connect(test_db_path)
     with conn:
         conn.executemany("INSERT INTO processed_log_file(content_hash, path) VALUES (?, ?)", file_processed_data)

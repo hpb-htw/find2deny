@@ -15,38 +15,12 @@ import sqlite3
 test_db_path = './test-data/ipdb.sqlite'
 ip_data = [
     (log_parser.ip_to_int('1.2.3.4'), '2019-03-28 11:12:13.000+0100', '2019-03-28 11:12:15.000+0100', 2),
-    (log_parser.ip_to_int('5.6.7.8'), '2019-03-28 11:12:13.000+0100', '2019-03-28 11:12:23.000+0100', 30),
+    (log_parser.ip_to_int('5.6.7.8'), '2019-03-28 11:12:13.000+0100', '2019-03-28 11:12:22.000+0100', 30),
     (log_parser.ip_to_int('9.10.11.12'), '2019-03-28 11:12:13.000+0100', '2019-03-28 11:12:13.000+0100', 4),
 ]
 ip_processed_data = [
     (log_parser.ip_to_int("1.2.3.4"), 1024, 'some-log-file.log')
 ]
-
-
-@pytest.fixture
-def prepare_test_data(caplog):
-    global test_db_path
-    print("**********************")
-    caplog.set_level(logging.DEBUG)
-    logging.basicConfig(level=logging.DEBUG)
-
-    conn = sqlite3.connect(test_db_path)
-    with conn:
-        sql_code = '''
-        DROP TABLE IF EXISTS log_ip;
-        DROP TABLE IF EXISTS block_network;
-        DROP TABLE IF EXISTS processed_log_ip;
-        '''
-        conn.executescript(sql_code)
-
-    judgment.init_database(test_db_path)
-    conn = sqlite3.connect(test_db_path)
-    with conn:
-        conn.executemany("INSERT INTO log_ip (ip, first_access, last_access, access_count) VALUES (?, ? , ?, ?)", ip_data)
-        conn.executemany("INSERT INTO processed_log_ip (ip, line, log_file) VALUES (?, ?, ?)", ip_processed_data)
-        ## conn.commit() ##
-    conn.close()
-    print("**********************init database done")
 
 
 def test_path_based_judgment_block():
@@ -84,7 +58,56 @@ def test_path_based_judgment_free():
     assert not block
 
 
-def test_update_deny(prepare_test_data):
+def test_time_based_judgment__ready_processed():
+    global test_db_path
+    processed_ip = ip_processed_data[0]
+    log_entry = log_parser.LogEntry(
+        processed_ip[2],
+        processed_ip[1],
+        ip=processed_ip[0],
+        time=datetime.strptime("2019-03-28 11:12:30.000+0100",
+                               judgment.DATETIME_FORMAT_PATTERN),
+        status=401,
+        byte=4286
+    )
+    conn = sqlite3.connect(test_db_path)
+    with conn:
+        blocker = judgment.TimeBasedIpJudgment(test_db_path)
+        is_processed = blocker._ready_processed(log_entry)
+        assert is_processed is True
+    conn.close()
+
+
+from importlib_resources import read_text
+@pytest.fixture
+def _prepare_test_data(caplog):
+    global test_db_path
+    print("**********************")
+    caplog.set_level(logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG)
+
+    conn = sqlite3.connect(test_db_path)
+    with conn:
+        sql_script = read_text("find2deny", "log-data.sql")
+        sql_code = '''\n
+        DROP TABLE IF EXISTS log_ip;
+        DROP TABLE IF EXISTS block_network;
+        DROP TABLE IF EXISTS processed_log_ip;
+        VACUUM;
+        ''' + sql_script
+        conn.executescript(sql_code)
+    conn.close()
+    # judgment.init_database(test_db_path)
+
+    conn = sqlite3.connect(test_db_path)
+    with conn:
+        conn.executemany("INSERT INTO log_ip (ip, first_access, last_access, access_count) VALUES (?, ? , ?, ?)", ip_data)
+        conn.executemany("INSERT INTO processed_log_ip (ip, line, log_file) VALUES (?, ?, ?)", ip_processed_data)
+    conn.close()
+    print("**********************init database done")
+
+
+def test_update_deny(_prepare_test_data):
     global test_db_path
     ip_network = "123.456.789.321/22"
     log_entry = log_parser.LogEntry(
@@ -110,27 +133,7 @@ def test_update_deny(prepare_test_data):
     assert cause_of_block == cause
 
 
-def test_time_based_judgment__ready_processed():
-    global test_db_path
-    processed_ip = ip_processed_data[0]
-    log_entry = log_parser.LogEntry(
-        processed_ip[2],
-        processed_ip[1],
-        ip=processed_ip[0],
-        time=datetime.strptime("2019-03-28 11:12:30.000+0100",
-                               judgment.DATETIME_FORMAT_PATTERN),
-        status=401,
-        byte=4286
-    )
-    conn = sqlite3.connect(test_db_path)
-    with conn:
-        blocker = judgment.TimeBasedIpJudgment(conn)
-        is_processed = blocker._ready_processed(log_entry)
-        assert is_processed is True
-    conn.close()
-
-
-def test_time_based_judgment_should_deny__add_new_entry_to_log(prepare_test_data):
+def test_time_based_judgment_should_deny__add_new_entry_to_log(_prepare_test_data):
     global test_db_path
     ip = log_parser.ip_to_int('8.7.6.5')
     line = 512
@@ -163,7 +166,7 @@ def test_time_based_judgment_should_deny__add_new_entry_to_log(prepare_test_data
     conn.close()
 
 
-def test_time_based_judgment_block_ip_network(prepare_test_data):
+def test_time_based_judgment_block_ip_network(_prepare_test_data):
     global test_db_path
 
     ip = log_parser.ip_to_int('5.6.7.8')
@@ -171,25 +174,25 @@ def test_time_based_judgment_block_ip_network(prepare_test_data):
         "some-log-file.log",
         2,
         ip=ip,
-        time=datetime.strptime("2019-03-28 11:12:33.000+0100",
+        time=datetime.strptime("2019-03-28 11:12:23.000+0100",
                                judgment.DATETIME_FORMAT_PATTERN),
         status=401,
         byte=4286
     )
     conn = sqlite3.connect(test_db_path)
     with conn:
-        blocker = judgment.TimeBasedIpJudgment(conn)
+        blocker = judgment.TimeBasedIpJudgment(test_db_path)
         to_be_deny, cause = blocker.should_deny(log_entry)
-        assert to_be_deny == True
+        assert to_be_deny is True
         c = conn.cursor()
         c.execute("SELECT status FROM log_ip WHERE ip = ?", (ip,))
         row = c.fetchone()
         ip_count = row[0]
         assert ip_count == 1
-    conn
+    conn.close()
 
 
-def test_time_based_judgment_update_access_time(prepare_test_data):
+def test_time_based_judgment_update_access_time(_prepare_test_data):
     global test_db_path
     ip = log_parser.ip_to_int('9.10.11.12')
     log_entry = log_parser.LogEntry(
@@ -203,7 +206,7 @@ def test_time_based_judgment_update_access_time(prepare_test_data):
     )
     conn = sqlite3.connect(test_db_path)
     with conn:
-        blocker = judgment.TimeBasedIpJudgment(conn)
+        blocker = judgment.TimeBasedIpJudgment(test_db_path)
         to_be_deny, cause = blocker.should_deny(log_entry)
         assert to_be_deny == False
         c = conn.cursor()
@@ -212,6 +215,20 @@ def test_time_based_judgment_update_access_time(prepare_test_data):
         ip_count = row[0]
         assert ip_count == 5
     conn.close()
+
+
+def test_user_agent_based_judgment():
+    ip = log_parser.ip_to_int('9.10.11.12')
+    log_entry = log_parser.LogEntry(
+        "some-log-file.log",
+        2,
+        ip=ip,
+        user_agent="Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)"
+    )
+    blacklist_agent = ['http://ahrefs.com/robot', 'http://www.semrush.com/bot.html']
+    blocker = judgment.UserAgentBasedIpJudgment(blacklist_agent)
+    deny, cause = blocker.should_deny(log_entry)
+    assert deny is True
 
 
 def test_lookup():

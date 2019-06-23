@@ -6,7 +6,7 @@ test-data/*.sqlite
 *.egg-info/
 __pycache__/
 .idea/
-__version__
+find2deny/__version__.py
 venv/
 build/
 dist/

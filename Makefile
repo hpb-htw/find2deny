@@ -2,7 +2,7 @@
 #
 
 project_name = find2deny
-version = 0.1.20
+version = 0.1.21
 compile = python3 setup.py sdist bdist_wheel
 python_files = $(shell find find2deny -name "*.py")
 __version__ = $(project_name)/__version__.py
@@ -82,6 +82,6 @@ profile: clean-db local-install
 # Auxiliary target run once after clone this project
 .PHONY: setup-dist-tool
 setup-dist-tool:
-	python -m pip install setuptools wheel twine
+	python3 -m pip install setuptools wheel twine pytest pytest-runner pytest-cov
 
 

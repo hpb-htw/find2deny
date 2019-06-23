@@ -30,6 +30,30 @@ def test_parse_tomcat_log_line():
     assert entry['byte'] == 4286
 
 
+def test_parse_tomcat_log_line_with_user_agent():
+    line = '93.242.172.189 - - [01/Apr/2019:07:11:42 +0000] "POST /mathcoach/ui/j_security_check HTTP/1.1" 200 738 "http://local.host/path/to/resource.html" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36"'
+    pattern = '%h %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i"'.split(' ')
+    entry = log_parser.parser_tomcat_log_line("no-name.log", 1024, line, pattern)
+    logging.debug("%s", entry)
+    assert entry['ip'] == log_parser.ip_to_int('93.242.172.189')
+
+    assert entry['user'] == '-'
+    assert entry['time'] == datetime.strptime('01/Apr/2019:07:11:42 +0000', '%d/%b/%Y:%H:%M:%S %z')
+    assert entry['request'].index('POST') >=0
+    assert entry['status'] == 200
+    assert entry['byte'] == 0 # Cannot parse '%O'
+    assert entry['user_agent'] == 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36'
+
+
+def test_parse_tomcat_log_line_with_user_agent_2():
+    line = r'1.2.3.4 "554fcae493e564ee0dc75bdf2ebf94caads|a:3:{s:2:\"id\";s:3:\"\'/*\";s:3:\"num\";s:141:\"*/ union select 1,0x272F2A,3,4,5,6,7,8,0x7b247b24524345275d3b6469652f2a2a2f286d6435284449524543544f52595f534550415241544f5229293b2f2f7d7d,0--\";s:4:\"name\";s:3:\"ads\";}554fcae493e564ee0dc75bdf2ebf94ca"'
+    print(line)
+    pattern = '%h "%{Referer}i"'.split(' ')
+    entry = log_parser.parser_tomcat_log_line("no-name.log", 1024, line, pattern)
+    print(entry)
+
+
+
 #TODO: make test use https://hypothesis.readthedocs.io/en/latest/quickstart.html
 def test_ip_to_int():
     ip = '134.96.214.161'

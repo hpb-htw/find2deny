@@ -26,11 +26,14 @@ LOGGER = logging.getLogger(__name__)
 
 def init_database(sqlite_db_path: str):
     sql_script = read_text("find2deny", "log-data.sql")
+    conn = db_connection.get_connection(sqlite_db_path)
     try:
-        with db_connection.get_connection(sqlite_db_path) as conn:
+        with conn:
             conn.executescript(sql_script)
+            conn.commit()
     except sqlite3.OperationalError as ex:
-        raise JudgmentException(f"Cannot init database in sqlite file {sqlite_db_path}", error=ex)
+        LOGGER.error(ex)
+        raise JudgmentException(f"Cannot init database in sqlite file {sqlite_db_path}", errors=ex)
     pass
 
 
@@ -166,7 +169,7 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
     def __del__(self):
         pass
 
-    def should_deny(self, log_entry: LogEntry, entry_count: int = 0) -> bool:
+    def should_deny(self, log_entry: LogEntry, entry_count: int = 0) -> (bool,str):
         """
 
         :param log_entry:
@@ -180,7 +183,6 @@ class TimeBasedIpJudgment(AbstractIpJudgment):
             return self._lookup_decision_cache(log_entry)
 
     def _ready_processed(self, log_entry: LogEntry) -> bool:
-        # TODO read table processed_log_ip to get Info about log_entry
         sql_cmd = "SELECT count(*) FROM processed_log_ip WHERE ip = ? AND line = ? AND log_file = ?"
         try:
             with self.conn as conn:
@@ -339,6 +341,24 @@ def __lookup_ip(normed_ip: str) -> str:
         LOGGER.warning("return ip instead of network")
         LOGGER.debug(ex)
         return normed_ip
+
+
+class UserAgentBasedIpJudgment(AbstractIpJudgment):
+    """
+        deny a ip in a log entry if a log entry has a User-Agent String containing one of given
+        substring. The list of substring is given by initialize this class
+    """
+    def __init__(self, blacklist_agent: List[str]):
+        self._blacklist_agent = blacklist_agent
+
+    def should_deny(self, log_entry: LogEntry, entry_count: int = 0) -> (bool,str):
+        ua = log_entry.user_agent
+        for bl in self._blacklist_agent:
+            if ua.find(bl) >= 0:
+                cleaned_ua = ua.replace("\n", ' ')
+                return True, f"{cleaned_ua} contains {bl}"
+        return False, None
+    pass
 
 
 class JudgmentException(Exception):

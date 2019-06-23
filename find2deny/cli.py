@@ -15,6 +15,7 @@ from . config_parser import ParserConfigException, \
     WHITE_LIST, \
     JUDGMENT, RULES, \
     BOT_REQUEST, MAX_REQUEST, INTERVAL_SECONDS, \
+    BLACKLIST_AGENT, \
     EXECUTION, SCRIPT, \
     parse_config_file
 
@@ -214,6 +215,9 @@ def judgment_by_name(judge, config):
             return judgment.TimeBasedIpJudgment(conn, max_request, interval)
         else:
             _parser.error(f"A SQLite database ({DATABASE_PATH}) must be configured in global section if Judgment {name} is used")
+    elif name == "user-agent-based-judgment":
+        blacklist_agent = rules[BLACKLIST_AGENT] if BLACKLIST_AGENT in rules else []
+        return judgment.UserAgentBasedIpJudgment(blacklist_agent)
     else:
         raise ParserConfigException(f"Unknown judgment {name}")
 

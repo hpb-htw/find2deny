@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS processed_log_ip (
     PRIMARY KEY (ip,line, log_file)
 );
 
-
+/*                         processed_log_file */
 CREATE TABLE IF NOT EXISTS processed_log_file (
     content_hash TEXT PRIMARY KEY,
     path TEXT

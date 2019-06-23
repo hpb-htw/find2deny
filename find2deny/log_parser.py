@@ -28,7 +28,8 @@ class LogEntry:
                  status: int = 0,
                  request: str = None,
                  byte: int = 0,
-                 user: str = None
+                 user: str = None,
+                 user_agent: str = None
                  ):
         self.__ip = ip
         self.__network = network
@@ -37,6 +38,7 @@ class LogEntry:
         self.__request = request
         self.__byte = byte
         self.__user = user
+        self.__user_agent = user_agent
         self.__log_file = log_file
         self.__line = line
 
@@ -131,8 +133,16 @@ class LogEntry:
         self.__user = user
 
     @property
+    def user_agent(self) -> str:
+        return self.__user_agent
+
+    @user_agent.setter
+    def user_agent(self, user_agent: str):
+        self.__user_agent = user_agent
+
+    @property
     def iso_time(self) -> str:
-        return self.__time.strftime(DATETIME_FORMAT_PATTERN)
+        return self.__time.strftime(DATETIME_FORMAT_PATTERN) if self.__time else "N/A"
 
     @property
     def ip_str(self):
@@ -165,6 +175,8 @@ class LogEntry:
             return self.__request
         elif item == "user":
             return self.__user
+        elif item == "user_agent":
+            return self.__user_agent
         elif item == "byte":
             return self.__byte
         elif item == "log_file":
@@ -185,6 +197,8 @@ class LogEntry:
             self.request = value
         elif key == "user":
             self.user = value
+        elif key == "user_agent":
+            self.__user_agent = value
         elif key == "byte":
             self.byte = value
         elif key == "log_file":
@@ -247,7 +261,7 @@ def open_log_file_fn(file_path):
         return lambda fp: open(fp)
 
 
-def parser_tomcat_log_line(log_file_path: str, num_of_line: int, log_line: str, pattern: str) -> LogEntry:
+def parser_tomcat_log_line(log_file_path: str, num_of_line: int, log_line: str, pattern: List[str]) -> LogEntry:
     entry = LogEntry(log_file_path, num_of_line)
     line_idx = 0
     host = None
@@ -268,11 +282,15 @@ def parser_tomcat_log_line(log_file_path: str, num_of_line: int, log_line: str, 
     def _parser_sentence(log_line, start_idx, begin_quote='"', end_quote='"'):
         sentence = ''
         if log_line[start_idx] != begin_quote:
-            raise TypeError("Expected string")
+            logging.debug(log_line)
+            logging.debug(pattern)
+            logging.debug(f"{start_idx}+-6 -> {log_line[start_idx-6:start_idx+6]}")
+            raise TypeError(f"Expected {begin_quote} but found {log_line[start_idx]} at {start_idx}")
         i = start_idx
         for i in range(start_idx + 1, len(log_line)):
             c = log_line[i]
-            if c == end_quote:
+            last_c = log_line[i-1] if i > 0 else ""
+            if c == end_quote and (last_c != '\\'):
                 i += 2  # '"' and ' '
                 break
             else:
@@ -299,15 +317,24 @@ def parser_tomcat_log_line(log_file_path: str, num_of_line: int, log_line: str, 
         elif value == '"%r"':
             (entry_value, line_idx) = _parser_sentence(log_line, line_idx)
             entry.request = entry_value
-        elif value == '%s':
+        elif value == '%s' or value == '%>s':
             (entry_value, line_idx) = _parser_word(log_line, line_idx)
             entry.status = int(entry_value)
         elif value == '%b':
             (entry_value, line_idx) = _parser_word(log_line, line_idx)
             entry.byte = int(entry_value)
+        elif value == '"%{User-Agent}i"':
+            (entry_value, line_idx) = _parser_sentence(log_line, line_idx)
+            entry.user_agent = entry_value
         else:
-            (entry_value, line_idx) = _parser_word(log_line, line_idx)
-            logging.debug("ignore pattern %s", value)
+            if value.startswith('"'):
+                logging.debug("ignore sentence pattern %s", value)
+                (entry_value, line_idx) = _parser_sentence(log_line, line_idx)
+            else:
+                logging.debug("ignore word pattern %s", value)
+                (entry_value, line_idx) = _parser_word(log_line, line_idx)
+        logging.debug("parsed entry: %s", entry_value)
+
 
     # update ip at the last attribute
     logging.debug("host=%s proxy=%s", host, proxy_host)

@@ -24,6 +24,9 @@ RULES = "rules"
 # Configuration keys for path-based-judgment
 BOT_REQUEST = "bot_request"
 
+# Configuration keys for user-agent-based-judgment
+BLACKLIST_AGENT = 'blacklist_agent'
+
 # Configuration keys for time based judgment
 MAX_REQUEST = "max_request"
 INTERVAL_SECONDS = "interval_seconds"
