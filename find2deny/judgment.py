@@ -13,7 +13,7 @@ from datetime import datetime
 import sqlite3
 import logging
 
-from ipwhois import IPWhois, exceptions
+from ipwhois import IPWhois, exceptions, ASNRegistryError
 from importlib_resources import read_text
 
 from . log_parser import LogEntry, DATETIME_FORMAT_PATTERN
@@ -336,7 +336,7 @@ def __lookup_ip(normed_ip: str) -> str:
     try:
         who = IPWhois(normed_ip).lookup_rdap()
         return who["network"]["cidr"]
-    except (urllib.error.HTTPError, exceptions.HTTPLookupError, exceptions.IPDefinedError) as ex:
+    except (urllib.error.HTTPError, exceptions.HTTPLookupError, exceptions.IPDefinedError, ASNRegistryError) as ex:
         LOGGER.warning("IP Lookup for %s fail", normed_ip)
         LOGGER.warning("return ip instead of network")
         LOGGER.debug(ex)
