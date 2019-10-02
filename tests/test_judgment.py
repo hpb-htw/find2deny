@@ -231,6 +231,20 @@ def test_user_agent_based_judgment():
     assert deny is True
 
 
+def test_user_agent_based_judgment_2():
+    ip = log_parser.ip_to_int('54.36.150.103')
+    log_entry = log_parser.LogEntry(
+        "some-log-file.log",
+        2,
+        ip=ip,
+        user_agent="Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)"
+    )
+    blacklist_agent = ['http://ahrefs.com', 'http://www.semrush.com']
+    blocker = judgment.UserAgentBasedIpJudgment(blacklist_agent)
+    deny, cause = blocker.should_deny(log_entry)
+    assert deny is True
+
+
 def test_lookup():
     ip = "134.96.210.150"
     expected_network = "134.96.0.0/16"
@@ -249,6 +263,17 @@ def test_lookup():
     assert network_cache == expected_network
 
     assert cache_lookup_duration <= first_lookup_duration
+
+
+def test_lookup_2():
+    ip = "54.36.148.129"
+    expected_network = "54.36.148.0/22 54.36.0.0/16"
+    first_lookup_start = time.perf_counter()
+    network = judgment.lookup_ip(ip)
+    first_lookup_stop = time.perf_counter()
+    first_lookup_duration = first_lookup_stop - first_lookup_start
+    logging.info("Lookup time: %s", first_lookup_duration)
+    assert network == expected_network
 
 
 def test_white_list():

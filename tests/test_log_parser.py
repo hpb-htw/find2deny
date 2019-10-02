@@ -53,6 +53,21 @@ def test_parse_tomcat_log_line_with_user_agent_2():
     print(entry)
 
 
+def test_parse_tomcat_log_line_with_user_agent_3():
+    line = r'54.36.150.103 - - [02/Oct/2019:08:38:31 +0200] "GET /openolat/dmz/1%3A1%3A1119026850%3A2%3A0%3Acid%3Amenu.guest/ HTTP/1.1" 200 15072 "-" "Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)"'
+    pattern = '%h %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i"'.split(' ')
+    entry = log_parser.parser_tomcat_log_line("no-name.log", 1024, line, pattern)
+    logging.debug("%s", entry)
+    assert entry['ip'] == log_parser.ip_to_int('54.36.150.103')
+
+    assert entry['user'] == '-'
+    assert entry['time'] == datetime.strptime('02/Oct/2019:08:38:31 +0200', '%d/%b/%Y:%H:%M:%S %z')
+    assert entry['request'].index('GET') >=0
+    assert entry['status'] == 200
+    assert entry['byte'] == 0 # Cannot parse '%O'
+    assert entry['user_agent'] == 'Mozilla/5.0 (compatible; AhrefsBot/6.1; +http://ahrefs.com/robot/)'
+
+
 
 #TODO: make test use https://hypothesis.readthedocs.io/en/latest/quickstart.html
 def test_ip_to_int():

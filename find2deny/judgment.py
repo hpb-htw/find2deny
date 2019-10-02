@@ -335,7 +335,9 @@ def lookup_ip(ip: str or int) -> str:
 def __lookup_ip(normed_ip: str) -> str:
     try:
         who = IPWhois(normed_ip).lookup_rdap()
-        return who["network"]["cidr"]
+        cidr = who["network"]["cidr"]
+        asn_cidr = who["asn_cidr"]
+        return cidr if cidr == asn_cidr else (cidr + ' ' + asn_cidr)
     except (urllib.error.HTTPError, exceptions.HTTPLookupError, exceptions.IPDefinedError, ASNRegistryError) as ex:
         LOGGER.warning("IP Lookup for %s fail", normed_ip)
         LOGGER.warning("return ip instead of network")
@@ -345,8 +347,8 @@ def __lookup_ip(normed_ip: str) -> str:
 
 class UserAgentBasedIpJudgment(AbstractIpJudgment):
     """
-        deny a ip in a log entry if a log entry has a User-Agent String containing one of given
-        substring. The list of substring is given by initialize this class
+        deny an ip in a log entry if a log entry has a User-Agent String containing one of given
+        substring. The list of substrings is given by initialize this class
     """
     def __init__(self, blacklist_agent: List[str]):
         self._blacklist_agent = blacklist_agent

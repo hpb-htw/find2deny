@@ -4,6 +4,7 @@ from .log_parser import LogEntry
 import re
 import logging
 
+
 class AbstractIpBlockExecution(ABC):
     @abstractmethod
     def begin_execute(self):
@@ -31,12 +32,17 @@ class FileBasedUWFBlock(AbstractIpBlockExecution):
         self.__blocked_item = []
         pass
 
-    def block(self,log: LogEntry, cause: str = None):
-        cause = cause.replace('\n', ' ') if cause is not None else ' ';
-        for n in re.split(",\\s*",log.network):
+    def block(self, log: LogEntry, cause: str = None):
+        cause = cause.replace('\n', ' ') if cause is not None else ' '
+        # Block network of IP
+        for n in re.split(",\\s*", log.network):
             ufw_block_cmd = f"ufw deny from {n.strip()} to any # {cause}"
             logging.debug("use command %s", ufw_block_cmd)
             self.__blocked_item.append(f"{ufw_block_cmd}\n")
+        # block IP
+        ufw_block_cmd = f"ufw deny from {log.ip_str} to any # {cause}"
+        logging.debug("use command %s", ufw_block_cmd)
+        self.__blocked_item.append(f"{ufw_block_cmd}\n")
         pass
 
     def end_execute(self):

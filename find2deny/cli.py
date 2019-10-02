@@ -1,5 +1,5 @@
 import sys
-from  os import path
+from os import path
 import argparse
 import logging
 import sqlite3
